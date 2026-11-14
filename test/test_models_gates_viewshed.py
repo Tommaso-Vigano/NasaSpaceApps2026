@@ -12,15 +12,17 @@ from src.models.gates import (
 )
 from src.models.viewshed import horizon_distance_m, viewshed
 
-HEADER = [
-    "Local time (Martian hour)",
-    "Temperature (K)",
-    "Incident solar flux on horizontal surface (W/m2)",
-    "Daily mean dust column visible optical depth above surface",
-    "Horizontal wind speed (m/s)",
-    "W-E wind component (m/s)",
-    "S-N wind component (m/s)",
-]
+def _header():
+    """Columns of the synthetic MCD profile (as exported by the MCD web interface)."""
+    return [
+        "Local time (Martian hour)",
+        "Temperature (K)",
+        "Incident solar flux on horizontal surface (W/m2)",
+        "Daily mean dust column visible optical depth above surface",
+        "Horizontal wind speed (m/s)",
+        "W-E wind component (m/s)",
+        "S-N wind component (m/s)",
+    ]
 
 
 def _flux(h, peak=500.0):
@@ -33,7 +35,7 @@ def _write_mcd(path, tau=0.4, peak=500.0):
     with open(path, "w", newline="") as f:
         f.write("# synthetic Mars Climate Database profile\n")
         w = csv.writer(f, quoting=csv.QUOTE_NONNUMERIC)
-        w.writerow(HEADER)
+        w.writerow(_header())
         for h in range(24):
             w.writerow([float(h), 200.0 + 2 * h, _flux(h, peak), tau, 5.0, 1.0, -1.0])
     return path
@@ -41,7 +43,7 @@ def _write_mcd(path, tau=0.4, peak=500.0):
 
 def test_load_mcd_keeps_known_columns(tmp_path):
     mcd = load_mcd_diurnal(_write_mcd(tmp_path / "mcd.csv"))
-    assert set(mcd) == set(HEADER[:5])
+    assert set(mcd) == set(_header()[:5])
     assert mcd["Local time (Martian hour)"].shape == (24,)
 
 
@@ -95,3 +97,30 @@ def test_viewshed_nan_blocks_ray():
     z[:, 25] = np.nan
     vis = viewshed(z, 10.0, 10.0, (20, 20), max_range_m=300.0)
     assert vis[20, 24] and not vis[20, 25] and not vis[20, 30]
+
+
+# --- air and surface temperature ---------------------------------------------
+
+T_AIR, T_SURF = "Temperature (K)", "Surface temperature (K)"
+
+
+@pytest.mark.parametrize("order", [(T_AIR, T_SURF), (T_SURF, T_AIR)],
+                         ids=["air-first", "surface-first"])
+def test_load_mcd_keeps_air_and_surface_temperature(tmp_path, order):
+    from src.models.gates import COL_TEMP, COL_TSURF, _column
+
+    header = ["Local time (Martian hour)", *order, "Horizontal wind speed (m/s)"]
+    values = {T_AIR: lambda h: 200.0 + h, T_SURF: lambda h: 170.0 + 3 * h}
+    path = tmp_path / "mcd.csv"
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f, quoting=csv.QUOTE_NONNUMERIC)
+        w.writerow(header)
+        for h in range(24):
+            w.writerow([float(h), *(values[c](h) for c in order), 5.0])
+    mcd = load_mcd_diurnal(path)
+    assert T_AIR in mcd and T_SURF in mcd
+    hours = np.arange(24.0)
+    np.testing.assert_allclose(mcd[T_AIR], 200.0 + hours)
+    np.testing.assert_allclose(mcd[T_SURF], 170.0 + 3 * hours)
+    np.testing.assert_allclose(_column(mcd, COL_TEMP), 200.0 + hours)
+    np.testing.assert_allclose(_column(mcd, COL_TSURF), 170.0 + 3 * hours)
