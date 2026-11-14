@@ -11,13 +11,15 @@ from src.data.map import Map
 from src.data.types import Datatype
 from src.data.adapters.registry import AdapterRegistry
 
+
 @AdapterRegistry.register_adapter("Global-dust")
 class DustAdapter(Adapter):
     """
     Estimate dust indices from the original RGB dust-map TIFF.
     Calibrated using https://agupubs.onlinelibrary.wiley.com/doi/pdf/10.1029/2001JE001580
     Returns approximate band midpoints, not original measurements.
-    Geographic coordinates and angular spacing are retained without reprojection.
+    Coordinates remain in degrees without reprojection. Out-of-range latitude
+    rows are removed; longitude columns are wrapped and reordered if needed.
     """
 
     # Colour families: red, orange, yellow, green, cyan, blue, magenta.
@@ -127,15 +129,35 @@ class DustAdapter(Adapter):
 
             # Corners represent cell centres, consistent with MapAdapter.
             x, y = source.xy(0, 0, offset="center")
-            right, bottom = source.xy(
-                source.height - 1, source.width - 1, offset="center",
-            )
-            top_left = (float(x), float(y))
-            bottom_right = (float(right), float(bottom))
+            dx, dy = float(transform.a), float(-transform.e)
+            longitudes = float(x) + np.arange(source.width) * dx
+            latitudes = float(y) - np.arange(source.height) * dy
+
+            # Do not clamp invalid rows onto the poles: that would break spacing.
+            latitude_rows = np.flatnonzero((latitudes >= -90) & (latitudes <= 90))
+            if latitude_rows.size == 0:
+                raise ValueError("The dust map has no latitude centres within [-90, 90].")
+            values = values[latitude_rows, :]
+            latitudes = latitudes[latitude_rows]
+            if np.any((longitudes < -180) | (longitudes > 180)):
+                longitudes = (longitudes + 180) % 360 - 180
+                order = np.argsort(longitudes)
+                longitudes = longitudes[order]
+                values = values[:, order]
+                if not np.allclose(np.diff(longitudes), dx, rtol=0, atol=1e-8):
+                    raise ValueError(
+                        "Wrapped dust longitudes do not form one regular grid; "
+                        "split patches crossing the antimeridian before adapting."
+                    )
+            top_left = (float(longitudes[0]), float(latitudes[0]))
+            bottom_right = (float(longitudes[-1]), float(latitudes[-1]))
+
             metadata = json.dumps({
                 "source": str(data),
                 "source_crs": source.crs.to_wkt(),
                 "coordinate_units": "degrees",
+                "longitude_range": "[-180, 180]",
+                "removed_latitude_rows": int(source.height - latitude_rows.size),
                 "tags": source.tags(),
                 "description": "Approximate dust indices estimated from RGB colours",
             })
