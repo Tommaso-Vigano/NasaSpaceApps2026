@@ -1,7 +1,8 @@
-from abc import ABC, abstractmethod
-from src.app.penalty.penalty_map import PenaltyMap
-from src.routing.profiles import Profile
+from abc import ABC
 
+from src.app.penalty.penalty_map import PenaltyMap
+from src.routing.profiles import Profile, ExpeditionProfile
+from src.aliases import percentage
 
 class PenaltyManager(ABC):
     """ The interface for penalty managers which are entrusted with constructing the cost
@@ -12,6 +13,12 @@ class PenaltyManager(ABC):
     """
 
     @staticmethod
-    def build_from(self, profile: Profile) -> PenaltyMap:
-        pass
+    def build_from(profile: Profile, granularity: percentage) -> PenaltyMap:
+        """ Build a PenaltyMap from the given profile and granularity, constructing first
+        the required penalty implementation additive components as individual pipelines. """
 
+        if isinstance(profile, ExpeditionProfile):
+            maps = []
+            result = PenaltyMap.reduce(maps)
+
+        return result
