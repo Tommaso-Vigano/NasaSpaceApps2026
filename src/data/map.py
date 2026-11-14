@@ -1,38 +1,27 @@
 from dataclasses import dataclass
-from .types import SpatialUnit
 
 import numpy as np
 from numpy.typing import NDArray
 
-"""
-Dataclass for storing the parsed information about the map
-"""
-Point3D = tuple[float, float, float]
+from src.aliases import Point2D
+from src.data.types import Datatype
 
 
 @dataclass
 class Map:
-    tensor: NDArray[np.float64]
-    granularity: float
-    top_left: Point3D
-    bottom_right: Point3D
-    value_type: SpatialUnit
+    """Scalar grid with geographic cell centres in (longitude, latitude).
 
-    def __post_init__(self) -> None:
-        self.tensor = np.asarray(self.tensor, dtype=np.float64)
+    granularity is the approximate angular step (dlongitude, dlatitude)
+    in degrees, positive rightwards and downwards respectively. Corners
+    describe the centres of the first and last cells.
+    """
 
-        if self.tensor.ndim != 3:
-            raise ValueError("tensor must have three dimensions: (x, y, z).")
+    values: NDArray[np.float64]
+    granularity: tuple[float, float]
+    top_left: Point2D
+    bottom_right: Point2D
+    metadata: str
+    value_type: Datatype
 
-        if not np.isfinite(self.granularity) or self.granularity <= 0:
-            raise ValueError("granularity must be finite and positive.")
+    title: str
 
-        for name in ("top_left", "bottom_right"):
-            point = np.asarray(getattr(self, name), dtype=float)
-            if point.shape != (3,) or not np.all(np.isfinite(point)):
-                raise ValueError(f"{name} must contain three finite coordinates.")
-            setattr(self, name, tuple(point.tolist()))
-
-    @property
-    def shape(self) -> tuple[int, int, int]:
-        return self.tensor.shape

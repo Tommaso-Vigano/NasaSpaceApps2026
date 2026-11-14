@@ -3,12 +3,16 @@ from enum import Enum
 
 class Datatype(Enum):
     TEMPERATURE = "Temperature"
+    DUST = "Dust"
+    ELEVATION = "Elevation"
     ALBEDO = "Albedo"
     RADIATION = "Radiation"
+    THERMAL_INERTIA = "ThermalInertia"
 
 
 class TemperatureUnit(Enum):
-    pass
+    CELSIUS = "Celsius"
+    KELVIN = "Kelvin"
 
 
 class RadiationUnit(Enum):
@@ -16,5 +20,5 @@ class RadiationUnit(Enum):
 
 
 class SpatialUnit(Enum):
-    Metre = "metre"
-    Coordinate = "coordinate"
+    Metre = "Metre"
+    Coordinate = "Coordinate"
