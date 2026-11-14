@@ -72,7 +72,7 @@ class MapAdapter(Adapter):
             x, y = source.xy(0, 0, offset="center")
 
             return Map(
-                elevation=elevation,
+                values=elevation,
                 granularity=(float(transform.a), float(-transform.e)),
                 top_left=(float(x), float(y)),
                 crs=source.crs.to_wkt(),

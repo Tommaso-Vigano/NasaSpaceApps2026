@@ -24,26 +24,30 @@ def main():
     print("Top-left cell:", terrain.top_left)
     print("Bottom-right cell:", terrain.bottom_right)
 
-    valid = np.isfinite(terrain.elevation)
+    valid = np.isfinite(terrain.values)
     print("Valid cells:", np.count_nonzero(valid))
-    print("Missing cells:", terrain.elevation.size - np.count_nonzero(valid))
+    print("Missing cells:", terrain.values.size - np.count_nonzero(valid))
 
     if not valid.any():
         raise ValueError("The map contains no valid elevations.")
 
-    print("Minimum elevation:", np.nanmin(terrain.elevation))
-    print("Maximum elevation:", np.nanmax(terrain.elevation))
+    print("Minimum elevation:", np.nanmin(terrain.values))
+    print("Maximum elevation:", np.nanmax(terrain.values))
 
     # Try retrieving the centre cell's coordinates and elevation.
     rows, columns = terrain.shape
     row, column = rows // 2, columns // 2
 
     print("Centre cell (x, y, z):", terrain.get_point(row, column))
+    longitude, latitude, elevation = terrain.get_geographic_point(10, 20)
 
+    print("Longitude:", longitude)
+    print("Latitude:", latitude)
+    print("Elevation:", elevation)
     # Show the elevation matrix.
     plt.figure(figsize=(9, 7))
     plt.imshow(
-        terrain.elevation,
+        terrain.values,
         cmap="terrain",
         origin="upper",
         interpolation="nearest",

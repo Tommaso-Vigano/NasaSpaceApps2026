@@ -11,16 +11,16 @@ Point3D = tuple[float, float, float]
 @dataclass
 class Map:
 
-    elevation: NDArray[np.float64]
+    values: NDArray[np.float64]
     granularity: tuple[float, float]
     top_left: Point2D
     crs: str
     value_type: SpatialUnit
 
     def __post_init__(self) -> None:
-        self.elevation = np.asarray(self.elevation, dtype=np.float64)
+        self.values = np.asarray(self.values, dtype=np.float64)
 
-        if self.elevation.ndim != 2 or self.elevation.size == 0:
+        if self.values.ndim != 2 or self.values.size == 0:
             raise ValueError("elevation must be a non-empty 2D array.")
 
         spacing = np.asarray(self.granularity, dtype=float)
@@ -42,7 +42,7 @@ class Map:
     @property
     def shape(self) -> tuple[int, int]:
         """Return (number of rows, number of columns)."""
-        return self.elevation.shape
+        return self.values.shape
     @property
     def bottom_right(self) -> Point2D:
         """Return the centre of the bottom-right cell."""
@@ -61,6 +61,26 @@ class Map:
         dx, dy = self.granularity
         x = self.top_left[0] + column * dx
         y = self.top_left[1] - row * dy
-        z = float(self.elevation[row, column])
+        z = float(self.values[row, column])
 
         return x, y, z
+
+    def get_geographic_point(
+            self, row: int, column: int
+    ) -> Point3D:
+        """Return (longitude, latitude, elevation) for a cell."""
+        from pyproj import CRS, Transformer
+
+        x, y, z = self.get_point(row, column)
+
+        source_crs = CRS.from_wkt(self.crs)
+
+        transformer = Transformer.from_crs(
+            source_crs,
+            source_crs.geodetic_crs,
+            always_xy=True,
+        )
+
+        longitude, latitude = transformer.transform(x, y)
+
+        return float(longitude), float(latitude), z
