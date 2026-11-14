@@ -217,7 +217,7 @@ class PenaltyManager:
                     a = min(1.0, max(0.0, a))
 
                     horizontal_distance = (
-                            2.0 * mars_radius * asin(sqrt(a))
+                        2.0 * mars_radius * asin(sqrt(a))
                     )
 
                     if horizontal_distance <= 1e-9:
