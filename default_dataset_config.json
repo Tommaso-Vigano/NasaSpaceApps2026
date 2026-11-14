@@ -1,0 +1,15 @@
+{
+  "datasets": [
+    {
+      "name": "Sample",
+      "description": "Lorem Ipsum",
+      "adapter": "- SAMPLE ADAPTER -"
+    },
+    {
+
+    },
+    {
+
+    }
+  ]
+}
