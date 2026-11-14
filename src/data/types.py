@@ -11,6 +11,7 @@ class Datatype(Enum):
     THERMAL_INERTIA = "Thermal Inertia"
 
 
+
 class TemperatureUnit(Enum):
     CELSIUS = "Celsius"
     KELVIN = "Kelvin"

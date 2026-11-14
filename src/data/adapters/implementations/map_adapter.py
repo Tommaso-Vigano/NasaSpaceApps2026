@@ -1,5 +1,5 @@
 """
-Implementation of the adapter interface in order to insert geographical data coming in DEM
+Implementation of the adapter interface in order to insert geographical data coming in tiff
 format to our data structure defined in map.py
 """
 
