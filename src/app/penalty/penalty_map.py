@@ -1,4 +1,5 @@
-from ...aliases import percentage
+from src.aliases import percentage
+
 
 class PenaltyMap:
 
@@ -11,4 +12,7 @@ class PenaltyMap:
         """
 
     def get_obstructed_region(self):
+        pass
+
+    def get_constraints(self) -> list:
         pass
