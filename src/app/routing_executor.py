@@ -13,7 +13,8 @@ class RoutingExecutor:
     ):
         pass
 
-    def load_profile_from_json(self, json: dict) -> Profile:
+    @staticmethod
+    def load_profile_from_json(json: dict) -> Profile:
         pass
 
 
