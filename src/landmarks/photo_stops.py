@@ -7,12 +7,14 @@ in gradi da nord vero, in senso orario, nell'intervallo [0, 360).
 from __future__ import annotations
 
 import csv
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from src.basic import Coordinate
 from src.landmarks.landmark import Landmark
+from src.landmarks.registry import LandmarkRegistry
 
 MARS_RADIUS_M = 3_396_190.0
 
@@ -33,7 +35,12 @@ class Photo:
 
 @dataclass
 class PhotoStop(Landmark):
-    """Tutte le foto scattate dalla stessa posizione. `coo` è il centro dello stop."""
+    """Tutte le foto scattate dalla stessa posizione. `coo` è il centro dello stop.
+
+    title, description ed extra (solo tipi JSON) sono obbligatori come in Landmark;
+    make_photo_stop li ricava dalle foto. `photos` serve all'uso interno
+    (find_photo_stops, best_photo) e non finisce nel LandmarkRegistry.
+    """
     photos: list[Photo] = field(default_factory=list)
 
 
@@ -184,24 +191,86 @@ def group_into_stops(photos: list[Photo], merge_radius_m: float = 5.0) -> list[P
     va nello stop più vicino se entro il raggio (il centro diventa la media delle foto),
     altrimenti apre un nuovo stop.
     """
-    stops: list[PhotoStop] = []
+    groups: list[list[Photo]] = []
     centers_lat: list[float] = []
     centers_lon: list[float] = []
     for p in sorted(photos, key=lambda p: (p.sol, p.file)):
-        if stops:
+        if groups:
             d = _haversine(p.lat, p.lon, np.asarray(centers_lat), np.asarray(centers_lon))
             j = int(np.argmin(d))
             if d[j] <= merge_radius_m:
-                stop = stops[j]
-                stop.photos.append(p)
-                centers_lat[j] = float(np.mean([q.lat for q in stop.photos]))
-                centers_lon[j] = float(np.mean([q.lon for q in stop.photos]))
-                stop.coo = Coordinate(centers_lat[j], centers_lon[j])
+                group = groups[j]
+                group.append(p)
+                centers_lat[j] = float(np.mean([q.lat for q in group]))
+                centers_lon[j] = float(np.mean([q.lon for q in group]))
                 continue
-        stops.append(PhotoStop(coo=Coordinate(p.lat, p.lon), photos=[p]))
+        groups.append([p])
         centers_lat.append(p.lat)
         centers_lon.append(p.lon)
-    return stops
+    return [make_photo_stop(g) for g in groups]
+
+
+def _circular_mean_deg(headings: list[float]) -> float:
+    """Media circolare di angoli in gradi, in [0, 360). Se i vettori si annullano
+    (risultante ~0) restituisce il primo angolo."""
+    a = np.radians(np.asarray(headings, dtype=float))
+    s, c = float(np.sin(a).sum()), float(np.cos(a).sum())
+    if math.hypot(s, c) < 1e-9 * len(headings):
+        return float(headings[0]) % 360.0
+    return math.degrees(math.atan2(s, c)) % 360.0
+
+
+def make_photo_stop(photos: list[Photo]) -> PhotoStop:
+    """Costruisce uno PhotoStop con title, description ed extra ricavati dalle foto.
+
+    coo = media di lat/lon; title = "Photo stop – sol A" (o "sol A–B" se più sol);
+    description = "{n} Perseverance photos ({camere})"; extra contiene solo tipi JSON:
+    type, sols, files, cameras, best_heading_deg (media circolare degli heading delle
+    foto: lo stop non conosce la direzione di marcia, quella la decide find_photo_stops).
+    """
+    if not photos:
+        raise ValueError("Uno PhotoStop richiede almeno una foto.")
+    coo = Coordinate(float(np.mean([p.lat for p in photos])),
+                     float(np.mean([p.lon for p in photos])))
+    sols = sorted({int(p.sol) for p in photos})
+    cameras = sorted({str(p.camera) for p in photos})
+    sol_label = f"sol {sols[0]}" if len(sols) == 1 else f"sol {sols[0]}–{sols[-1]}"
+    best = round(_circular_mean_deg([p.heading_deg for p in photos]), 1) % 360.0
+    return PhotoStop(
+        coo=coo,
+        title=f"Photo stop – {sol_label}",
+        description=f"{len(photos)} Perseverance photos ({', '.join(cameras)})",
+        extra={
+            "type": "photo_stop",
+            "sols": sols,
+            "files": [str(p.file) for p in photos],
+            "cameras": cameras,
+            "best_heading_deg": float(best),
+        },
+        photos=list(photos),
+    )
+
+
+def register_photo_stops(registry: LandmarkRegistry, stops: list[PhotoStop],
+                         prefix: str = "photo_stop") -> list[str]:
+    """Aggiunge gli stop al LandmarkRegistry con id "{prefix}_{i:03d}" (i da 0).
+
+    Usa lo schema del registry (title, description, coordinate {lat, lon}, extra) e un
+    solo add_landmarks: il batch è validato per intero, id già presenti -> ValueError e
+    nessuno stop aggiunto. Il registry conserva Landmark semplici (copie), non le foto;
+    i file restano in extra["files"]. Restituisce gli id nell'ordine degli stop.
+    """
+    entries = {
+        f"{prefix}_{i:03d}": {
+            "title": s.title,
+            "description": s.description,
+            "coordinate": {"lat": s.coo.lat, "lon": s.coo.lon},
+            "extra": s.extra,
+        }
+        for i, s in enumerate(stops)
+    }
+    registry.add_landmarks(entries)
+    return list(entries)
 
 
 # ---------------------------------------------------------------------------
