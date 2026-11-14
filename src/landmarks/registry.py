@@ -42,21 +42,27 @@ class LandmarkRegistry:
                 raise ValueError("ID must be a nonempty string")
             if not isinstance(entry, dict):
                 raise ValueError("entry must be an object")
-            title, description = entry["title"], entry["description"]
+            title = entry.get("title", entry.get("name"))
+            description = entry.get("description", "")
             if not isinstance(title, str) or not title.strip():
                 raise ValueError("title must be a nonempty string")
             if not isinstance(description, str):
                 raise ValueError("description must be a string")
 
-            coordinate = entry["coordinate"]
-            lat, lon = coordinate["lat"], coordinate["lon"]
+            if "coordinate" in entry:
+                coordinate = entry["coordinate"]
+                lat, lon = coordinate["lat"], coordinate["lon"]
+            else:
+                lat, lon = entry["latitude"], entry["longitude"]
 
             if any(isinstance(v, bool) or not isinstance(v, (int, float))
                    or not math.isfinite(v) for v in (lat, lon)):
                 raise ValueError("latitude and longitude must be finite numbers")
             if not -90 <= lat <= 90:
                 raise ValueError("latitude must be between -90 and 90")
-            # Preserve the dataset's longitude convention (-180..180 or 0..360).
+            # The new flat format uses degrees East in [0, 360].
+            if "coordinate" not in entry:
+                lon = (lon + 180) % 360 - 180
             extra = entry.get("extra", {})
             if not isinstance(extra, dict):
                 raise ValueError("extra must be an object")
@@ -80,7 +86,15 @@ class LandmarkRegistry:
                                  object_pairs_hook=unique_object)
             if not isinstance(entries, dict):
                 raise ValueError("Expected an object keyed by landmark ID")
-            for landmark_id, entry in entries.items():
+            if isinstance(entries.get("landmarks"), list):
+                items = []
+                for entry in entries["landmarks"]:
+                    if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+                        raise ValueError("Each landmark must be an object with a name")
+                    items.append((entry["name"], entry))
+            else:
+                items = entries.items()
+            for landmark_id, entry in items:
                 if landmark_id in self._landmarks:
                     raise ValueError(f"Duplicate landmark ID: {landmark_id!r}")
                 self._landmarks[landmark_id] = self._parse(landmark_id, entry)
@@ -95,6 +109,11 @@ class LandmarkRegistry:
 
     def get(self, landmark_id: str) -> Landmark | None:
         return self._landmarks.get(landmark_id)
+
+    def to_dict(self) -> dict[str, dict]:
+        """Return an independent JSON-compatible dictionary, preserving IDs."""
+        return {landmark_id: deepcopy(self._entry(landmark))
+                for landmark_id, landmark in self._landmarks.items()}
 
     @staticmethod
     def _entry(landmark: Landmark) -> dict:
