@@ -18,9 +18,9 @@ def main():
 
     terrain = MapAdapter().adapt(path)
 
-    print("Shape:", terrain.shape)
+    print("Shape:", terrain.values.shape)
     print("Granularity:", terrain.granularity)
-    print("Coordinate type:", terrain.value_type)
+    print("Value type:", terrain.value_type)
     print("Top-left cell:", terrain.top_left)
     print("Bottom-right cell:", terrain.bottom_right)
 
@@ -35,11 +35,12 @@ def main():
     print("Maximum elevation:", np.nanmax(terrain.values))
 
     # Try retrieving the centre cell's coordinates and elevation.
-    rows, columns = terrain.shape
+    rows, columns = terrain.values.shape
     row, column = rows // 2, columns // 2
 
-    print("Centre cell (x, y, z):", terrain.get_point(row, column))
-    longitude, latitude, elevation = terrain.get_geographic_point(10, 20)
+    longitude = terrain.top_left[0] + column * terrain.granularity[0]
+    latitude = terrain.top_left[1] - row * terrain.granularity[1]
+    elevation = terrain.values[row, column]
 
     print("Longitude:", longitude)
     print("Latitude:", latitude)

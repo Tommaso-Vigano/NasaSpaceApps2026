@@ -1,20 +1,23 @@
 import colorsys
+import json
 from pathlib import Path
 
 import numpy as np
 import rasterio
 from rasterio.enums import ColorInterp
 
-from ..adapter import Adapter
-from ...map import Map
-from ...types import SpatialUnit
+from src.data.adapters.adapter import Adapter
+from src.data.map import Map
+from src.data.types import Datatype
+from src.data.adapters.registry import AdapterRegistry
 
-
+@AdapterRegistry.register_adapter("Global-dust")
 class DustAdapter(Adapter):
     """
     Estimate dust indices from the original RGB dust-map TIFF.
     Calibrated using https://agupubs.onlinelibrary.wiley.com/doi/pdf/10.1029/2001JE001580
     Returns approximate band midpoints, not original measurements.
+    Geographic coordinates and angular spacing are retained without reprojection.
     """
 
     # Colour families: red, orange, yellow, green, cyan, blue, magenta.
@@ -111,17 +114,9 @@ class DustAdapter(Adapter):
                     "Expected a north-up raster without rotation."
                 )
 
-            if source.crs.is_geographic:
-                value_type = SpatialUnit.Coordinate
-            elif (
-                source.crs.is_projected
-                and source.crs.linear_units_factor[1] == 1.0
-            ):
-                value_type = SpatialUnit.Metre
-            else:
+            if not source.crs.is_geographic:
                 raise ValueError(
-                    "Only geographic coordinates or projected metres "
-                    "are supported."
+                    "Expected a dust map already in geographic coordinates."
                 )
 
             values = self._rgb_to_dust_index(source.read())
@@ -130,12 +125,27 @@ class DustAdapter(Adapter):
             valid = np.all(source.read_masks() > 0, axis=0)
             values[~valid] = np.nan
 
+            # Corners represent cell centres, consistent with MapAdapter.
             x, y = source.xy(0, 0, offset="center")
+            right, bottom = source.xy(
+                source.height - 1, source.width - 1, offset="center",
+            )
+            top_left = (float(x), float(y))
+            bottom_right = (float(right), float(bottom))
+            metadata = json.dumps({
+                "source": str(data),
+                "source_crs": source.crs.to_wkt(),
+                "coordinate_units": "degrees",
+                "tags": source.tags(),
+                "description": "Approximate dust indices estimated from RGB colours",
+            })
 
             return Map(
                 values=values,
                 granularity=(float(transform.a), float(-transform.e)),
-                top_left=(float(x), float(y)),
-                crs=source.crs.to_wkt(),
-                value_type=value_type,
+                top_left=top_left,
+                bottom_right=bottom_right,
+                metadata=metadata,
+                value_type=Datatype.DUST,
+                title=f"Dust Map {top_left[0]} {top_left[1]} {bottom_right[0]} {bottom_right[1]}",
             )
