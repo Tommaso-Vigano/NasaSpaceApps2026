@@ -1,0 +1,4 @@
+# Dipendenze extra solo per scripts/demo_map.py (la CI e src/ usano solo numpy)
+numpy
+folium>=0.15
+Pillow>=9.1
