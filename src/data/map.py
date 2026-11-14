@@ -1,11 +1,9 @@
+from src.data.types import SpatialUnit
+from src.aliases import Point2D, Point3D
+
 from dataclasses import dataclass
-from .types import SpatialUnit
 import numpy as np
 from numpy.typing import NDArray
-
-
-Point2D = tuple[float, float]
-Point3D = tuple[float, float, float]
 
 
 @dataclass
@@ -18,10 +16,11 @@ class Map:
     value_type: SpatialUnit
 
     def __post_init__(self) -> None:
+        """ Initialize the map object by ensuring arrays are numpy arrays and spacing is """
         self.values = np.asarray(self.values, dtype=np.float64)
 
         if self.values.ndim != 2 or self.values.size == 0:
-            raise ValueError("elevation must be a non-empty 2D array.")
+            raise ValueError("The scalar field must be a two dimensional map.")
 
         spacing = np.asarray(self.granularity, dtype=float)
         if (
@@ -43,6 +42,7 @@ class Map:
     def shape(self) -> tuple[int, int]:
         """Return (number of rows, number of columns)."""
         return self.values.shape
+
     @property
     def bottom_right(self) -> Point2D:
         """Return the centre of the bottom-right cell."""
@@ -51,8 +51,9 @@ class Map:
         x, y = self.top_left
         return x + (columns - 1) * dx, y - (rows - 1) * dy
 
+    """
     def get_point(self, row: int, column: int) -> Point3D:
-        """Return (x, y, z). Missing elevation values remain NaN."""
+        Return (x, y, z). Missing elevation values remain NaN.
         rows, columns = self.shape
 
         if not (0 <= row < rows and 0 <= column < columns):
@@ -68,7 +69,7 @@ class Map:
     def get_geographic_point(
             self, row: int, column: int
     ) -> Point3D:
-        """Return (longitude, latitude, elevation) for a cell."""
+        Return (longitude, latitude, elevation) for a cell.
         from pyproj import CRS, Transformer
 
         x, y, z = self.get_point(row, column)
@@ -84,3 +85,4 @@ class Map:
         longitude, latitude = transformer.transform(x, y)
 
         return float(longitude), float(latitude), z
+    """
