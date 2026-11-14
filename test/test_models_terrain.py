@@ -87,3 +87,42 @@ def test_nan_propagates_to_slope_and_mask():
     assert np.isnan(tri(z)[2, 2])
     steps = edge_steps(z)
     assert np.isnan(steps[E, 3, 2]) and np.all(np.isnan(steps[:, 3, 3]))
+
+
+# --- from_map ---------------------------------------------------------------
+
+def _degree_map(metadata='{"coordinate_units": "degrees"}'):
+    from src.data.map import Map
+    from src.data.types import Datatype
+
+    step = 1e-4
+    rows, cols = 3, 4
+    top_left = (77.45, 18.44 + step)
+    bottom_right = (77.45 + (cols - 1) * step, 18.44 + step - (rows - 1) * step)
+    return Map(
+        values=np.arange(rows * cols, dtype=float).reshape(rows, cols),
+        granularity=(step, step),
+        top_left=top_left,
+        bottom_right=bottom_right,
+        metadata=metadata,
+        value_type=Datatype.ELEVATION,
+        title="Elevation Map test",
+    )
+
+
+def test_from_map_converts_degrees_to_metres():
+    from src.models.terrain import from_map
+
+    m = _degree_map()
+    z, dx, dy = from_map(m)
+    assert z.shape == (3, 4)
+    assert abs(dy - 5.93) <= 0.01
+    assert abs(dx - 5.62) <= 0.01
+
+
+def test_from_map_rejects_non_degree_units():
+    import pytest
+    from src.models.terrain import from_map
+
+    with pytest.raises(ValueError, match="degrees"):
+        from_map(_degree_map('{"coordinate_units": "metres"}'))

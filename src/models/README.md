@@ -2,7 +2,7 @@
 
 These are pure functions on `numpy` arrays (numpy and the standard library only). The grid spacing `(dx, dy)` is always in **metres**. All units are SI: m, s, kg, W, J. Angles are in degrees. The grade `G` is a percentage (`100·rise/run`). **NaN means nodata.** Any cell or edge that touches a NaN is invalid: its slope is NaN, its mask is `True` and its cost is `inf`.
 
-The models do not depend on `Map`. `terrain.from_map(m) -> (z, dx, dy)` is the bridge. If the map is geographic (degrees), it converts the spacing to metres.
+The models do not depend on `Map`. `terrain.from_map(m) -> (z, dx, dy)` is the bridge. A `Map` grid is always in degrees `(dlon, dlat)`; `from_map` converts the spacing to metres at the central latitude (`dy = R·dlat`, `dx = R·dlon·cos(lat)`) and raises `ValueError` if the metadata declares `coordinate_units` other than `"degrees"`.
 
 ## Direction convention
 

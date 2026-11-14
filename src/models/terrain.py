@@ -11,6 +11,8 @@ the edge ``(r, c) -> (r + drow_k, c + dcol_k)``. Edges leaving the grid are
 NaN (or inf for costs).
 """
 
+import json
+
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
@@ -121,18 +123,27 @@ def step_masks(steps: np.ndarray, max_up: float, max_down: float) -> np.ndarray:
 def from_map(m) -> tuple:
     """Extract ``(z, dx, dy)`` in metres from a ``src.data.map.Map``.
 
-    If the map grid is geographic (degrees), the spacing is converted with a
-    local spherical approximation at the central latitude:
-    dy = R * dlat, dx = R * dlon * cos(lat_centre)   (TEAM ASSUMPTION).
+    A Map grid is always geographic: ``granularity = (dlon, dlat)`` in degrees
+    and corners are cell centres ``(lon, lat)``. The spacing is converted with
+    a local spherical approximation at the central latitude (TEAM ASSUMPTION):
+    dy = R * dlat, dx = R * dlon * cos(lat_centre), with R = MARS_RADIUS_M.
+
+    Raises ValueError if the metadata JSON declares ``coordinate_units`` other
+    than ``"degrees"``. Non-JSON metadata or a missing key means degrees.
     """
-    from src.data.types import SpatialUnit
+    try:
+        meta = json.loads(m.metadata) if m.metadata else {}
+    except (TypeError, ValueError):
+        meta = {}
+    units = meta.get("coordinate_units") if isinstance(meta, dict) else None
+    if units is not None and units != "degrees":
+        raise ValueError(
+            f"from_map expects a Map with coordinate_units 'degrees', got {units!r}."
+        )
 
     z = np.asarray(m.values, dtype=np.float64)
-    dx, dy = m.granularity
-    if m.value_type == SpatialUnit.Coordinate:
-        rows = z.shape[0]
-        lat_centre = m.top_left[1] - (rows - 1) * dy / 2.0
-        dy_m = MARS_RADIUS_M * np.radians(dy)
-        dx_m = MARS_RADIUS_M * np.radians(dx) * np.cos(np.radians(lat_centre))
-        return z, float(dx_m), float(dy_m)
-    return z, float(dx), float(dy)
+    dlon, dlat = m.granularity
+    lat_centre = (m.top_left[1] + m.bottom_right[1]) / 2.0
+    dy_m = MARS_RADIUS_M * np.radians(dlat)
+    dx_m = MARS_RADIUS_M * np.radians(dlon) * np.cos(np.radians(lat_centre))
+    return z, float(dx_m), float(dy_m)
