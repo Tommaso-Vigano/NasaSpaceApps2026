@@ -36,6 +36,15 @@ class WebServer:
         def index():
             return render_template("index.html")
 
+        @self.app.get("/planet")
+        def planet():
+            return render_template("index_planet.html")
+
+        @self.app.get("/api/globe/landmarks")
+        def globe_landmarks():
+            with self._lock:
+                return jsonify(self.landmarks.to_globe_dict())
+
         @self.app.errorhandler(HTTPException)
         def http_error(error):
             response = error.get_response()

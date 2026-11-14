@@ -31,19 +31,16 @@ class RoutingResult:
 
 
 class RoutingExecutor:
+
     def __init__(
         self,
         top_left: Coordinate,
         bot_right: Coordinate,
         profile: Profile,
-        fineness: percentage,
     ):
         self.top_left = top_left
         self.bot_right = bot_right
         self.profile = profile
-
-        # The WorldSlice must already be prepared at this fineness.
-        self.fineness = fineness
 
         self.penalty_manager = PenaltyManager()
         self.grid_graph: GridGraph | None = None
@@ -109,7 +106,7 @@ class RoutingExecutor:
         point: Coordinate,
         reference: Map,
     ) -> Node:
-        """Snap a geographic coordinate to the nearest grid cell."""
+        """ Snap a geographic coordinate to the nearest grid cell. """
         dx, dy = reference.granularity
 
         column = int(round(
@@ -125,9 +122,7 @@ class RoutingExecutor:
             0 <= column < columns
             and 0 <= row < rows
         ):
-            raise ValueError(
-                "Coordinate is outside the supplied map."
-            )
+            raise ValueError("Coordinate is outside the supplied map.")
 
         return column, row
 
@@ -155,9 +150,7 @@ class RoutingExecutor:
                 self.top_left.lon <= point.lon <= self.bot_right.lon
                 and self.bot_right.lat <= point.lat <= self.top_left.lat
             ):
-                raise ValueError(
-                    "Start and end must lie inside the routing bounds."
-                )
+                raise ValueError("Start and end must lie inside the routing bounds.")
 
         # Elevation contributes slope penalties to edges.
         # Other layers contribute penalties to cells.

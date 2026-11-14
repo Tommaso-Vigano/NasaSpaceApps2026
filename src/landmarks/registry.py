@@ -15,6 +15,7 @@ class LandmarkRegistry:
         self._landmarks: dict[str, Landmark] = {}
         self._user_ids: set[str] = set()
         self._preset_path: Path | None = None
+        self._display_metadata: dict = {}
 
     @classmethod
     def from_file(
@@ -66,6 +67,10 @@ class LandmarkRegistry:
             extra = entry.get("extra", {})
             if not isinstance(extra, dict):
                 raise ValueError("extra must be an object")
+            extra = dict(extra)
+            for key in ("type", "place", "landed"):
+                if key in entry:
+                    extra[key] = entry[key]
             json.dumps(extra, allow_nan=False)
             return Landmark(Coordinate(float(lat), float(lon)), title,
                             description, deepcopy(extra))
@@ -87,6 +92,11 @@ class LandmarkRegistry:
             if not isinstance(entries, dict):
                 raise ValueError("Expected an object keyed by landmark ID")
             if isinstance(entries.get("landmarks"), list):
+                if not user:
+                    self._display_metadata = {
+                        key: deepcopy(entries[key]) for key in ("groups", "types")
+                        if key in entries
+                    }
                 items = []
                 for entry in entries["landmarks"]:
                     if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
@@ -114,6 +124,19 @@ class LandmarkRegistry:
         """Return an independent JSON-compatible dictionary, preserving IDs."""
         return {landmark_id: deepcopy(self._entry(landmark))
                 for landmark_id, landmark in self._landmarks.items()}
+
+    def to_globe_dict(self) -> dict:
+        """Export the live registry in the globe viewer's JSON format."""
+        result = deepcopy(self._display_metadata)
+        result["landmarks"] = [
+            {**{key: deepcopy(landmark.extra[key])
+                for key in ("type", "place", "landed") if key in landmark.extra},
+             "id": landmark_id, "name": landmark.title,
+             "description": landmark.description,
+             "latitude": landmark.coo.lat, "longitude": landmark.coo.lon}
+            for landmark_id, landmark in self._landmarks.items()
+        ]
+        return result
 
     @staticmethod
     def _entry(landmark: Landmark) -> dict:

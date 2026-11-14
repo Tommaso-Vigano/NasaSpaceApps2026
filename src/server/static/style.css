@@ -1,0 +1,338 @@
+
+:root {
+    --space: #07080c;
+    --dust: #ead9c8;
+    --dust-dim: #b9a592;
+    --rust: #c4532f;
+    --pin: #f0c9a4;
+    --panel: rgba(14, 11, 12, 0.78);
+    --line: rgba(234, 217, 200, 0.22);
+}
+ 
+* { box-sizing: border-box; }
+ 
+html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--space);
+    color: var(--dust);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+ 
+#globe {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    touch-action: none;
+}
+ 
+/* Landmark label, positioned next to the selected pin by main.js */
+.label {
+    position: fixed;
+    top: 0;
+    left: 0;
+    min-width: 150px;
+    max-width: 260px;
+    padding: 10px 34px 11px 13px;
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--rust);
+    border-radius: 6px;
+    will-change: transform;
+    transition: opacity 0.15s ease;
+}
+ 
+.label[hidden] { display: none; }
+.label.is-behind { opacity: 0; pointer-events: none; }
+ 
+/* thin leader line down to the pin */
+.label::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    width: 1px;
+    height: 16px;
+    background: var(--pin);
+    opacity: 0.7;
+}
+ 
+.label-name {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+ 
+.label-meta {
+    margin: 2px 0 0;
+    font-size: 12.5px;
+    color: var(--dust);
+}
+ 
+.label-detail {
+    margin: 1px 0 0;
+    font-size: 12.5px;
+    color: var(--dust-dim);
+}
+ 
+.label-coords {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    color: var(--dust-dim);
+    font-variant-numeric: tabular-nums;
+}
+ 
+.label-close {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--dust-dim);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+.label-close:hover { color: var(--dust); }
+ 
+/* Side panels: legend (bottom left) and display controls (top right) */
+.panel {
+    position: fixed;
+    width: 232px;
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: 13px;
+}
+.legend { left: 20px; bottom: 20px; }
+.controls { right: 20px; top: 20px; }
+ 
+.panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 10px 14px;
+    background: none;
+    border: 0;
+    color: var(--dust);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+.panel-body { padding: 0 14px 12px; }
+.panel[data-open="false"] .panel-body { display: none; }
+ 
+.chevron {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: var(--dust-dim);
+    stroke-width: 1.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 0.18s ease;
+}
+.panel[data-open="false"] .chevron { transform: rotate(-90deg); }
+ 
+.group-title {
+    margin: 10px 0 3px;
+    font-size: 12px;
+    color: var(--dust-dim);
+}
+.group-title:first-child { margin-top: 2px; }
+ 
+/* Rows (shared by legend and controls) */
+.legend-row,
+.row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0;
+    color: var(--dust);
+    transition: opacity 0.18s ease;
+}
+.row { cursor: pointer; }
+.row-label { flex: 1; }
+.is-off { opacity: 0.42; }
+ 
+/* Swatches echo the pins: a soft dot with a halo, or a tiny rover */
+.swatch {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 18px;
+    height: 14px;
+    color: var(--c, var(--dust));
+}
+.swatch svg { width: 18px; height: 12px; }
+.swatch-dot::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 24%, transparent);
+}
+ 
+/* Control sections and group headers */
+.control-section + .control-section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.section-head {
+    margin-bottom: 2px;
+    font-weight: 600;
+}
+.row-group {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--dust-dim);
+}
+.row-group .row-label { color: var(--dust-dim); }
+.row-indent { padding-left: 2px; }
+ 
+/* Delicate switches (real checkboxes underneath, so keyboard and screen readers work) */
+.row input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.switch {
+    position: relative;
+    flex: none;
+    width: 26px;
+    height: 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+.switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--dust-dim);
+    transition: transform 0.18s ease, background 0.18s ease;
+}
+.row input:checked ~ .switch {
+    background: var(--c, var(--dust));
+    border-color: transparent;
+}
+.row input:checked ~ .switch::after {
+    transform: translateX(12px);
+    background: #1a1416;
+}
+.row input:indeterminate ~ .switch {
+    background: rgba(234, 217, 200, 0.3);
+    border-color: transparent;
+}
+.row input:indeterminate ~ .switch::after {
+    transform: translateX(6px);
+    background: var(--dust);
+}
+.row input:focus-visible ~ .switch {
+    outline: 2px solid var(--pin);
+    outline-offset: 2px;
+}
+ 
+/* Rotation toggle, bottom right */
+.toggle {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 10px 16px 10px 14px;
+    background: var(--panel);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    color: var(--dust);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+.toggle:hover { border-color: var(--rust); }
+ 
+.icon { width: 14px; height: 14px; fill: currentColor; }
+.icon-play { display: none; }
+.toggle[aria-pressed="true"] .icon-pause { display: none; }
+.toggle[aria-pressed="true"] .icon-play { display: block; }
+ 
+.toggle:focus-visible,
+.panel-head:focus-visible,
+.label-close:focus-visible {
+    outline: 2px solid var(--pin);
+    outline-offset: 2px;
+}
+ 
+.loading {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    text-align: center;
+    background: var(--space);
+    color: var(--dust-dim);
+    font-size: 15px;
+    transition: opacity 0.6s ease;
+}
+.loading.is-done { opacity: 0; pointer-events: none; }
+ 
+@media (max-width: 640px) {
+    .toggle { right: 12px; bottom: 12px; }
+    .legend { left: 12px; bottom: 12px; width: 200px; }
+    .controls { right: 12px; top: 12px; width: 212px; }
+}
+ 
+/* Geographic selection stays separate from landmark labels and display controls. */
+.region-panel {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    width: min(285px, calc(100vw - 270px));
+    padding: 13px 15px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    backdrop-filter: blur(8px);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.region-panel p { margin: 5px 0 0; color: var(--dust-dim); }
+.region-panel dl { margin: 10px 0; }
+.region-panel dt { color: var(--dust-dim); font-size: 11px; }
+.region-panel dd { margin: 1px 0 7px; font-variant-numeric: tabular-nums; }
+.region-panel button {
+    color: var(--dust);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 4px 9px;
+    cursor: pointer;
+}
+.region-panel button:hover { border-color: var(--rust); }
+.region-panel button:focus-visible { outline: 2px solid var(--pin); outline-offset: 2px; }
+@media (max-width: 640px) {
+    .region-panel { top: 12px; left: 12px; width: calc(100vw - 260px); min-width: 105px; padding: 8px; }
+}

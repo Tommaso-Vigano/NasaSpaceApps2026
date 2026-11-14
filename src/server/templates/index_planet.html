@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mars</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <canvas id="globe"></canvas>
+    <section id="region-panel" class="region-panel" aria-label="Region of interest">
+        <strong>Region of interest</strong>
+        <p id="region-status" role="status">Right-drag on Mars to select a region.</p>
+        <dl id="region-bounds" hidden>
+            <dt>Top left (latitude, longitude)</dt><dd id="region-top-left"></dd>
+            <dt>Bottom right (latitude, longitude)</dt><dd id="region-bottom-right"></dd>
+        </dl>
+        <button id="region-clear" type="button" hidden>Clear selection</button>
+    </section>
+
+    <!-- Selected landmark -->
+    <div id="label" class="label" hidden>
+        <button id="label-close" class="label-close" type="button" aria-label="Close">&times;</button>
+        <h2 id="label-name" class="label-name"></h2>
+        <p id="label-meta" class="label-meta"></p>
+        <p id="label-detail" class="label-detail" hidden></p>
+        <p id="label-coords" class="label-coords"></p>
+    </div>
+
+    <!-- Legend (bottom left). Filled from the JSON by main.js -->
+    <aside id="legend" class="panel legend" data-open="true">
+        <button class="panel-head" type="button" aria-expanded="true" aria-controls="legend-body">
+            <span>Legend</span>
+            <svg class="chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>
+        </button>
+        <div id="legend-body" class="panel-body"></div>
+    </aside>
+
+    <!-- Display controls (top right). Each <section> is one family of controls;
+         a "Layers" section can be added next to "Markers" later. -->
+    <aside id="controls" class="panel controls" data-open="true">
+        <button class="panel-head" type="button" aria-expanded="true" aria-controls="controls-body">
+            <span>Display</span>
+            <svg class="chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>
+        </button>
+        <div id="controls-body" class="panel-body">
+            <section id="marker-controls" class="control-section" aria-label="Markers"></section>
+        </div>
+    </aside>
+
+    <button id="rotate-toggle" class="toggle" type="button" aria-pressed="false">
+        <svg class="icon icon-pause" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="3" y="2" width="3.5" height="12" rx="1"/><rect x="9.5" y="2" width="3.5" height="12" rx="1"/>
+        </svg>
+        <svg class="icon icon-play" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 2.5v11a.8.8 0 0 0 1.2.7l9-5.5a.8.8 0 0 0 0-1.4l-9-5.5A.8.8 0 0 0 4 2.5z"/>
+        </svg>
+        <span class="toggle-text">Pause rotation</span>
+    </button>
+
+    <div id="loading" class="loading">Loading Mars…</div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="{{ url_for('static', filename='main.js') }}"
+            data-landmarks-url="{{ url_for('globe_landmarks') }}"
+            data-static-url="{{ url_for('static', filename='') }}"></script>
+</body>
+
+</html>
