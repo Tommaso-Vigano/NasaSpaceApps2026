@@ -5,11 +5,9 @@ class Datatype(Enum):
     TEMPERATURE = "Temperature"
     DUST = "Dust"
     ELEVATION = "Elevation"
-    IMAGERY = "Imagery"
     ALBEDO = "Albedo"
     RADIATION = "Radiation"
-    THERMAL_INERTIA = "ThermalInertia"
-
+    PENALTY = "Penalty"
 
 class TemperatureUnit(Enum):
     CELSIUS = "Celsius"
