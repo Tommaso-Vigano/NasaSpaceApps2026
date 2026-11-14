@@ -19,6 +19,13 @@ Per-edge arrays have shape `(8, rows, cols)`. The value `a[k, r, c]` belongs to 
 | `constraints.py` | Frozen dataclasses `RoboticRover`, `CrewedRover`, `Astronaut`; `MARS_RADIUS_M`, `G_MARS`, `G_EARTH`, `G_REL`, `ETA_TERRAIN`, `SOURCES` |
 | `terrain.py` | slope, TRI, smoothing, step heights, masks |
 | `metabolic.py` | Pandolf, Minetti, Tobler, per-edge time/energy, per-cell bridge |
+| `rocks.py` | Golombek & Rapp rock abundance, probability of a rock taller than a limit |
+| `rover.py` | rover no-go mask and per-edge travel time |
+| `budget.py` | Dijkstra time maps, EVA action radius, SEP isochrone, path check with point of no return |
+| `gates.py` | GO/NO-GO from a Mars Climate Database diurnal CSV (daylight, dust storm) |
+| `viewshed.py` | line of sight from the lander, horizon distance |
+
+The demo script `scripts/demo_models.py` runs on a synthetic DEM and only prints results. Run it from the repo root with `python scripts/demo_models.py`.
 
 ## Formulas
 
@@ -45,6 +52,55 @@ Per-edge arrays have shape `(8, rows, cols)`. The value `a[k, r, c]` belongs to 
   - An edge is `inf` if its slope exceeds `max_slope_deg`, if its step is beyond the limits (when `steps` is given), if it touches a NaN, or if it leaves the grid.
   - The cost is **asymmetric**: going uphill and going downhill along the same edge cost different amounts.
 - `cell_cost_from_edges(edge_cost, dx, dy, reduce="mean"|"max")`: takes the mean or max of the finite outgoing edges per metre and multiplies it by `dx`. The result is `inf` if no outgoing edge is finite. This is a bridge for cell-based pathfinders. **It loses the uphill/downhill asymmetry.** Note that it also takes `dx, dy`, because it needs the edge lengths.
+
+**Rocks** [R5]
+
+- `q(k) = 1.79 + 0.152/k` in 1/m.
+- `cfa(D, k) = k·exp(−q·D)`: the fraction of area covered by rocks with diameter ≥ D (m).
+- `number_density_above(D0, k)`: the number of rocks per m² with diameter ≥ D0. It is `∫_{D0}^{10 m} k q e^{−qx} / (πx²/4) dx`, computed with the trapezoidal rule on a logarithmic grid of 2000 points. It is vectorised over maps of k by integrating once per unique k value.
+- `p_rock_taller_than(h, k, A) = 1 − exp(−N(D ≥ h/0.5)·A)`: the Poisson probability of at least one rock taller than h in an area A.
+
+**Rover**
+
+- `rover_hard_mask`: a cell is forbidden if its slope is above `max_slope_deg`, its thermal inertia is below `min_thermal_inertia` (when `ti` is given), or it is a dune (when `dunes_nogo` is set and a dune mask is given). NaN is forbidden.
+- `rover_edge_time`: `t = d3D / speed_ms · (1 + p_rock)`.
+  - k is the mean of the two cells, and the area is the horizontal edge length × `width_m`.
+  - The edge is `inf` if either end cell is forbidden, if `|step| > max_step_m`, if it touches a NaN, or if it leaves the grid.
+  - By default the slope comes from `horn_slope`, which is NaN on the border, so **border cells are forbidden for rovers**.
+
+**Budget** (times in s)
+
+- `dijkstra_grid(edge_cost, sources, reverse=False, solver=None)` uses a heapq Dijkstra on the 8-connected grid.
+  - With `reverse=True` it gives the cost from every cell back to the sources, using the cost of the edge `v → u` (direction `(k+4) % 8`). Costs are asymmetric, so `return_time_map ≠ outbound_time_map`.
+  - It is pure Python and runs in O(N log N): about 0.1 s for 40 000 cells. Crop to a few km around the lander at 5–20 m/px.
+  - `solver` is a hook for a faster implementation with the same contract.
+- `eva_reach_mask`: `t_out + dwell + t_ret ≤ eva_nominal_h`. The 2 km walkback limit (`max_distance_from_lander_m`) is **not** applied here.
+- `sep_isochrone_mask`: `t_ret ≤ sep_return_min` [R20].
+- `check_eva(path, ...) → EvaReport`, with one value per path point k:
+  - `t_elapsed[k]`, the cumulative time including egress.
+  - `nominal_ok[k]`: `t_elapsed + t_ret ≤ 6 h`.
+  - `contingency_ok[k]`: `t_elapsed + 1.5·t_ret ≤ 6 h + 2 h` [R11].
+  - `point_of_no_return`: the last index before the first contingency failure. It is `None` if every point passes and `−1` if the first point already fails.
+  - `energy_cum_J`, `mean_power_W` and `sep_ok`.
+  - `feasible`: every point is `nominal_ok` and the total time plus ingress is ≤ 6 h.
+  - Raises `ValueError` if two consecutive points are not adjacent.
+
+**Gates** [R24]
+
+- `load_mcd_diurnal(csv)` reads the CSV with the `csv` module and skips `#` comment lines. Columns are matched by substring: "Local time", "solar flux", "optical depth", "Temperature (K)", "wind speed". Only the first match of each is kept, and extra columns such as the wind components are ignored.
+- `daylight_window(mcd, 100)`: the first and last time with horizontal flux ≥ 100 W/m², interpolated linearly between hours. It assumes a single daytime window and an EVA that does not cross midnight.
+- `dust_storm_nogo(mcd, 2.0)`: τ ≥ 2.
+- `solar_power_ratio(mcd, ref)`: peak flux divided by the reference peak flux.
+- `eva_go(...) → (go, reasons)`: lists the reasons for a NO-GO.
+
+**Viewshed**
+
+- `viewshed(z, dx, dy, observer, observer_h=2, target_h=1.8, max_range_m=5000, n_rays=720)`:
+  - Radial rays are sampled every `min(dx, dy)` at the nearest cell, with the curvature drop `d²/(2R)` applied.
+  - A cell is visible if the angle to a target `target_h` above it is ≥ the maximum terrain angle earlier on the ray.
+  - A NaN or the grid edge blocks the rest of the ray.
+  - Far away the rays are `2πr/n_rays` apart. Increase `n_rays` if that exceeds the cell size.
+- `horizon_distance_m(h) = sqrt(2·R·h)`, which gives 3497 m for h = 1.8 m.
 
 ## Sources
 
@@ -86,3 +142,9 @@ None of these are taken from a reference.
 8. **Thermal inertia.** `min_thermal_inertia = 100` (SI), our threshold for loose soil, based on [R4].
 9. **Smoothing window.** `smooth_mean` uses partial windows near borders and nodata holes. This slightly biases `edge_steps` on ramps in those places.
 10. **Degree conversion.** Grids in degrees are converted to metres with a local sphere of radius `MARS_RADIUS_M`, evaluated at the central latitude.
+11. **Rock height.** Rock height is 0.5 × diameter (`h_over_d`), and the integration stops at `D_max = 10 m`.
+12. **Rover rock penalty.** Rover travel time is multiplied by `(1 + p_rock)`, a penalty for detours around rocks.
+13. **Contingency return.** `degraded_return_factor = 1.5`: in a contingency the walk back is 50 % slower.
+14. **Daylight threshold.** An EVA needs a horizontal solar flux of at least 100 W/m².
+15. **Dust storm threshold.** A dust optical depth τ ≥ 2 counts as an active dust storm, which is a NO-GO.
+16. **Viewshed heights.** `observer_h = 2 m` for the lander antenna and `target_h = 1.8 m` for the astronaut's helmet. Line of sight is geometric only, with no radio diffraction.
