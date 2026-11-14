@@ -8,9 +8,11 @@ class Datatype(Enum):
     ALBEDO = "Albedo"
     RADIATION = "Radiation"
 
+
 class TemperatureUnit(Enum):
     CELSIUS = "Celsius"
     KELVIN = "Kelvin"
+
 
 class RadiationUnit(Enum):
     pass

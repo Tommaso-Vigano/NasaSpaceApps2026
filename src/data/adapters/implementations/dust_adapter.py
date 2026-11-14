@@ -9,8 +9,9 @@ from rasterio.enums import ColorInterp
 from src.data.adapters.adapter import Adapter
 from src.data.map import Map
 from src.data.types import Datatype
+from src.data.adapters.registry import AdapterRegistry
 
-
+@AdapterRegistry.register_adapter("Global-dust")
 class DustAdapter(Adapter):
     """
     Estimate dust indices from the original RGB dust-map TIFF.

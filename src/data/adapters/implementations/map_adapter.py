@@ -13,8 +13,10 @@ from pyproj import CRS, Transformer
 from src.data.adapters.adapter import Adapter
 from src.data.map import Map
 from src.data.types import Datatype
+from src.data.adapters.registry import AdapterRegistry
 
 
+@AdapterRegistry.register_adapter("Depth-dust")
 class MapAdapter(Adapter):
     """Convert a north-up, single-band elevation raster into a Map."""
 
