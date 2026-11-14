@@ -63,6 +63,7 @@ SOURCES = {
 
 SECONDS_PER_MINUTE = 60.0
 SECONDS_PER_HOUR = 3600.0
+KELVIN_OFFSET = 273.15  # 0 degC in kelvin (K -> degC conversion)
 
 # ==========================================================================
 # Grid
