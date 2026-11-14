@@ -1,9 +1,8 @@
 from typing import Tuple, Union
-from unittest import case
 
 import numpy as np
 from enum import Enum, auto
-from basic import Coordinate
+from src.basic import Coordinate
 
 from pathfinding.core.grid import Grid
 from pathfinding.core.diagonal_movement import DiagonalMovement
@@ -73,12 +72,11 @@ class SpatialAStar:
 
         return x, y
 
-    def algorithm(self, start_pos, destination_pos):
+    def algorithm(self, start_pos, destination_pos, convert_type = True):
         """
-        :param start_pos: tuple of int, representing the initial position
-        :param destination_pos: tuple of int, representing the destination position
-        :return: It returns the path from source to destination.
-            "Runs" returns the total number of steps taken.
+        :param start_pos: tuple of float or Coordinate, representing the initial position
+        :param destination_pos: tuple of float or Coordinate, representing the destination position
+        :return: It returns the path from source to destination and the number of runs.
         """
         # todo: modify this to make it native of class
         grid = Grid(matrix=self.grid_cost)
@@ -86,11 +84,9 @@ class SpatialAStar:
         # todo: modify algorithm if needed
         finder = AStarFinder(diagonal_movement=DiagonalMovement.never)
 
-        start_x = start_pos[0]
-        start_y = start_pos[1]
-
-        dest_x = destination_pos[0]
-        dest_y = destination_pos[1]
+        # converting from cardinals coordinate to grid index
+        start_x, start_y = self._to_grid_index(start_pos)
+        dest_x, dest_y = self._to_grid_index(destination_pos)
 
         start = grid.node(start_x, start_y)
         destination = grid.node(dest_x, dest_y)
@@ -102,8 +98,19 @@ class SpatialAStar:
         # debug print
         #print(grid.grid_str(path=path, start=start, end=destination))
 
+        # converting type into native python type
+        if convert_type:
+            path = self.extract_path_details(path)
+
         return path, runs
 
+
+    # ---------------------------------------------------
+    # In this section we define methods for converting specific library types into
+    # native Python types.
+    @staticmethod
+    def extract_path_details(pathfinding_path):
+        return [((node.x, node.y), node.weight) for node in pathfinding_path]
 
 
 if __name__ == "__main__":
@@ -117,7 +124,7 @@ if __name__ == "__main__":
 
     sp = SpatialAStar((0,0), matrix, 1.0)
 
-    path, run = sp.algorithm((0,1), (1,2))
+    path, run = sp.algorithm((0.0, 0.0), (-2.0, 2.0))
 
     print(run)
-    print(path[-1].g)
+    print(path)
