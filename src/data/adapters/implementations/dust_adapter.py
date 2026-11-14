@@ -5,9 +5,9 @@ import numpy as np
 import rasterio
 from rasterio.enums import ColorInterp
 
-from ..adapter import Adapter
-from ...map import Map
-from ...types import SpatialUnit
+from src.data.adapters.adapter import Adapter
+from src.data.map import Map
+from src.data.types import SpatialUnit
 
 
 class DustAdapter(Adapter):

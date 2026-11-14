@@ -6,3 +6,4 @@ class AdapterRegistry:
     @staticmethod
     def get_available() -> list[str]:
         return []
+
