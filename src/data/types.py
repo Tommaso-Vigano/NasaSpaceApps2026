@@ -8,6 +8,8 @@ class Datatype(Enum):
     ALBEDO = "Albedo"
     RADIATION = "Radiation"
     PENALTY = "Penalty"
+    THERMAL_INERTIA = "Thermal Inertia"
+
 
 class TemperatureUnit(Enum):
     CELSIUS = "Celsius"
