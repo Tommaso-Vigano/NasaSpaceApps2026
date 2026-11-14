@@ -10,16 +10,21 @@ class Profile(metaclass=ABCMeta):
 
 @dataclass
 class HumanProfile(Profile):
-    pass
+
+    tolerable_temp: float
 
 
 @dataclass
 class RoverProfile(Profile):
-    pass
+
+    max_height_drop: float
 
 
 class ExpeditionProfile(Profile):
 
     def __init__(self):
         self.profiles = []
+
+    def add_participant(self, participant: Profile):
+        self.profiles.append(participant)
 
