@@ -8,6 +8,7 @@ class Datatype(Enum):
     IMAGERY = "Imagery"
     ALBEDO = "Albedo"
     RADIATION = "Radiation"
+    THERMAL_INERTIA = "ThermalInertia"
 
 
 class TemperatureUnit(Enum):
