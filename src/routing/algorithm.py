@@ -47,12 +47,12 @@ class SpatialAStar:
 
         match direction:
             # longitude
-            case Direction.North: final_position.lon += self.step_length
-            case Direction.South: final_position.lon -= self.step_length
+            case Direction.North: final_position.lat += self.step_length
+            case Direction.South: final_position.lat -= self.step_length
 
             # latitude
-            case Direction.East: final_position.lat += self.step_length
-            case Direction.West: final_position.lat -= self.step_length
+            case Direction.East: final_position.lon += self.step_length
+            case Direction.West: final_position.lon -= self.step_length
 
 
         return final_position
