@@ -16,6 +16,8 @@ from src.routing.profiles import (
     ExpeditionProfile,
 )
 from src.app.penalty.implementations.progressive_cutoff import ProgressiveCutoff
+from .implementations.penalty import Penalty
+
 
 class PenaltyComponents:
     """Store the component penalty maps on the same grid."""
@@ -43,60 +45,106 @@ class PenaltyComponents:
         )
 
 
+PenaltySelector = Callable[[Profile], Penalty]
+
+
 class PenaltyManager:
-    """Build penalty maps from a profile and an iterable of maps."""
+    """Build map penalties and select penalties for movement slopes."""
 
     def __init__(self):
-        # Datatype -> penalty implementation.
-        # Implementations will be added later.
-        self.penalties = {}
+        # Datatype -> function that configures a penalty from a profile.
+        self.penalties: dict[Datatype, PenaltySelector] = {}
 
-    def register_penalty(self, data_type: Datatype, penalty) -> None:
-        """Associate a data category with a penalty implementation."""
-        self.penalties[data_type] = penalty
+    def register_penalty(
+        self,
+        data_type: Datatype,
+        selector: PenaltySelector,
+    ) -> None:
+        """Register how a penalty is selected for a data category."""
+        self.penalties[data_type] = selector
 
-    def select_cost_function(self, data_type: Datatype):
-        """Return the penalty implementation for this category."""
+    def select_cost_function(
+        self,
+        profile: Profile,
+        data_type: Datatype,
+    ) -> Penalty:
+        """Return a penalty configured for the supplied profile."""
         if data_type not in self.penalties:
             raise NotImplementedError(
-                f"No penalty implemented for {data_type.name}."
+                f"No penalty selection configured for {data_type.name}."
             )
 
-        return self.penalties[data_type]
+        selector = self.penalties[data_type]
+        return selector(profile)
+
+    def _get_slope_limit(self, profile: Profile) -> float:
+        """Find the maximum allowed slope, including expedition members."""
+        if isinstance(profile, ExpeditionProfile):
+            if not profile.profiles:
+                raise ValueError(
+                    "An expedition must contain at least one participant."
+                )
+
+            # Every participant must be able to traverse the route.
+            return min(
+                self._get_slope_limit(participant)
+                for participant in profile.profiles
+            )
+
+        if isinstance(profile, (HumanProfile, RoverProfile)):
+            return float(profile.hard_constraints["slope"])
+
+        raise TypeError(
+            f"Unsupported profile: {type(profile).__name__}"
+        )
+
+    def select_slope_cost_function(self, profile: Profile) -> Penalty:
+
+        return ProgressiveCutoff(
+            threshold=self._get_slope_limit(profile),
+            weight=1.0,
+        )
 
     def _construct_cost_pipeline(
-            self,
-            profile,
-            world_slice: Iterable[Map],
-    ) -> "PenaltyComponents":
-        """Construct one penalty map for each input map."""
+        self,
+        profile: Profile,
+        world_slice: Iterable[Map],
+    ) -> PenaltyComponents:
+        """Compute one component penalty map for each supplied layer."""
         penalty_maps = []
 
         for source_map in world_slice:
-            penalty = self.select_cost_function(source_map.value_type)
-
-            # Future penalty implementations must provide this method.
-            costs = penalty.compute(source_map, profile)
-
-            penalty_map = replace(
-                source_map,
-                values=costs,
-                title=f"{source_map.title} — penalty",
-                metadata=f"Penalty derived from {source_map.title}",
+            penalty = self.select_cost_function(
+                profile,
+                source_map.value_type,
             )
 
-            penalty_maps.append(penalty_map)
+            # Penalty implementations accept the entire values array.
+            costs = penalty.compute(source_map.values)
+
+            penalty_maps.append(
+                replace(
+                    source_map,
+                    values=costs,
+                    title=f"{source_map.title} — penalty",
+                    metadata=(
+                        f"Penalty computed with {type(penalty).__name__}. "
+                        f"Source metadata: {source_map.metadata}"
+                    ),
+                )
+            )
 
         return PenaltyComponents(penalty_maps)
 
     def build_from(
-            self,
-            profile,
-            world_slice: Iterable[Map],
+        self,
+        profile: Profile,
+        world_slice: Iterable[Map],
     ) -> Map:
-        """Construct the components and return their total penalty."""
+        """Compute and sum the component penalty maps."""
         components = self._construct_cost_pipeline(profile, world_slice)
         return components.get_total_penalty()
+
 
     def build_slopes_list(
             self,
@@ -191,29 +239,3 @@ class PenaltyManager:
                         cost,
                     )
 
-    def select_slope_cost_function(
-            self,
-            profile: Profile,
-    ) -> Callable[[float], float]:
-        """Select a soft progressive cut-off for the absolute slope in degrees."""
-
-        def get_slope_limit(participant: Profile) -> float:
-            if isinstance(participant, ExpeditionProfile):
-                if not participant.profiles:
-                    raise ValueError("An expedition must contain participants.")
-
-                return min(
-                    get_slope_limit(member)
-                    for member in participant.profiles
-                )
-
-            if isinstance(participant, (HumanProfile, RoverProfile)):
-                return float(participant.hard_constraints["slope"])
-
-            raise TypeError(
-                f"Unsupported profile: {type(participant).__name__}"
-            )
-
-        limit = get_slope_limit(profile)
-
-        return ProgressiveCutoff(threshold=limit, weight=1.0)
