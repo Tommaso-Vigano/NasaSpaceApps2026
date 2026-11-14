@@ -29,7 +29,9 @@ class GridGraph:
     def __init__(self, cost_matrix: List[List[float]],
                  top_left_corner: Tuple[float, float],   # (lon, lat)
                  step_length: float,
-                 allow_diagonal: bool = True):
+                 allow_diagonal: bool = True,
+                 slope_list: List[SlopeCost] = None
+                 ):
         # cost_matrix: each cell has a particular cost
         self.cost_matrix = cost_matrix
         # top left corner: to set polar coordinates
@@ -43,6 +45,9 @@ class GridGraph:
         self.cols = len(cost_matrix[0])
 
         self.graph = self._build_graph()
+        # slope_list applied to the graph
+        if slope_list is not None:
+            self.apply_slope_costs(slope_list)
 
     # ---------- Method 1: matrix -> graph ----------
     def _build_graph(self) -> nx.DiGraph:
