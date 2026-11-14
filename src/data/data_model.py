@@ -30,7 +30,7 @@ class WorldSlice:
 
 
 class WorldModel:
-    """Collection of maps, preserving insertion order and allowing duplicate titles.
+    """ Collection of maps, preserving insertion order and allowing duplicate titles.
     Queries return new lists containing the original Map objects.
     """
 
@@ -38,30 +38,29 @@ class WorldModel:
         self._maps: list[Map] = list(maps)
 
     def add_map(self, map_: Map) -> None:
-        """Append a map to the collection."""
+        """ Append a map to the collection. """
         self._maps.append(map_)
 
     def get_all_maps(self) -> list[Map]:
-        """Return all maps in insertion order."""
+        """ Return all maps in insertion order. """
         return list(self._maps)
 
     def get_maps_by_datatype(self, datatype: Datatype) -> list[Map]:
-        """Return maps measuring the requested datatype."""
+        """ Return maps measuring the requested datatype. """
         return [map_ for map_ in self._maps if map_.value_type == datatype]
 
     def get_maps_by_title_contains(self, text: str) -> list[Map]:
-        """Return maps whose titles contain text (case-sensitive)."""
+        """ Return maps whose titles contain text (case-sensitive). """
         return [map_ for map_ in self._maps if text in map_.title]
 
     def get_map_by_title(self, title: str) -> Map | None:
-        """Return the first map with this exact title, or None if absent."""
+        """ Return the first map with this exact title, or None if absent. """
         return next((map_ for map_ in self._maps if map_.title == title), None)
 
     def get_maps_at_coordinate(
         self, coordinate: Coordinate | Point2D,
     ) -> list[Map]:
-        """Return maps covering a Coordinate or a (longitude, latitude) tuple.
-
+        """ Return maps covering a Coordinate or a (longitude, latitude) tuple
         Longitude uses the same convention as the stored corners.
         """
         if isinstance(coordinate, Coordinate):
@@ -72,9 +71,9 @@ class WorldModel:
         return [
             map_ for map_ in self._maps
             if min(map_.top_left[0], map_.bottom_right[0])
-            <= longitude <= max(map_.top_left[0], map_.bottom_right[0])
+                <= longitude <= max(map_.top_left[0], map_.bottom_right[0])
             and min(map_.top_left[1], map_.bottom_right[1])
-            <= latitude <= max(map_.top_left[1], map_.bottom_right[1])
+                <= latitude <= max(map_.top_left[1], map_.bottom_right[1])
         ]
 
     def make_slice(
@@ -87,7 +86,7 @@ class WorldModel:
 
         Resolution is a positive angular spacing in degrees (scalar or dx, dy).
         The grid starts at top_left and includes bottom_right only when aligned
-        with that spacing; otherwise it stops at the last cell centre inside.
+        with that spacing,  otherwise it stops at the last cell centre inside.
         Patches are interpolated independently, then finite overlapping samples
         are averaged with equal weight. Uncovered cells remain NaN.
         """
@@ -162,8 +161,8 @@ class SamplingUtils:
         return xs, ys, (dx, dy)
 
     @staticmethod
-    def _sample_on_grid(m: Map, xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
-        """Bilinearly interpolate a patch without extrapolation or filling holes.
+    def sample_on_grid(m: Map, xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+        """ Bilinearly interpolate a patch without extrapolation or filling holes.
 
         Only nonzero interpolation weights require finite source values, so a
         neighbouring NaN does not erase an exact valid source-cell sample.
@@ -172,26 +171,34 @@ class SamplingUtils:
         values = np.asarray(m.values, dtype=float)
         if values.ndim != 2 or values.size == 0:
             raise ValueError("Map values must be a nonempty two-dimensional array.")
+
+        # Extract the point corresponding to the top left and bottom right corners
         left, top = SamplingUtils.point(m.top_left)
         right, bottom = SamplingUtils.point(m.bottom_right)
         spacing = np.asarray(m.granularity, dtype=float)
+
         if (spacing.shape != (2,) or not np.all(np.isfinite(spacing))
                 or np.any(spacing <= 0)):
-            raise ValueError("Map granularity must contain finite positive dx and dy.")
+            raise ValueError("Map granularity must contain finite positive dx and dy for coordinates.")
+
         rows, columns = values.shape
         dx, dy = spacing
         expected = (left + (columns - 1) * dx, top - (rows - 1) * dy)
         if not np.allclose((right, bottom), expected, rtol=0, atol=1e-8):
-            raise ValueError("Map corners, granularity and array shape are inconsistent.")
+            raise ValueError("Map corners, granularity and array shape are inconsistent so it was impossible"
+                             "to sample the values on a grid.")
+
         old_x = left + np.arange(columns) * dx
         old_y = top - np.arange(rows) * dy
         result = np.full((ys.size, xs.size), np.nan)
+
         # Restrict queries to the patch, allowing only floating-point roundoff.
         tolerance = 32 * np.finfo(float).eps * max(
             1.0, abs(left), abs(right), abs(top), abs(bottom),
         )
         xi = np.flatnonzero((xs >= left - tolerance) & (xs <= right + tolerance))
         yi = np.flatnonzero((ys <= top + tolerance) & (ys >= bottom - tolerance))
+
         if xi.size == 0 or yi.size == 0:
             return result
         query_y, query_x = np.meshgrid(
@@ -199,6 +206,7 @@ class SamplingUtils:
         )
         points = np.stack((query_y, query_x), axis=-1)
         valid = np.isfinite(values)
+
         # Zero-fill only for arithmetic; a second interpolator tracks whether
         # all contributing measurements were actually present.
         numerator = RegularGridInterpolator(
@@ -209,6 +217,7 @@ class SamplingUtils:
             (old_y, old_x), valid.astype(float),
             bounds_error=False, fill_value=None,
         )(points)
+
         sampled = np.where(np.isclose(support, 1.0, rtol=0, atol=1e-12),
                            numerator, np.nan)
         result[np.ix_(yi, xi)] = sampled
@@ -221,7 +230,7 @@ class SamplingUtils:
         bottom_right: Coordinate | Point2D,
         new_stride: float | Point2D,
     ) -> Map:
-        """Resample one map; outside coverage and missing support become NaN."""
+        """ Resample one map; outside coverage and missing support become NaN."""
         return SamplingUtils.merge_to_window([m], top_left, bottom_right, new_stride)
 
     @staticmethod
@@ -231,7 +240,7 @@ class SamplingUtils:
         bottom_right: Coordinate | Point2D,
         resolution: float | Point2D,
     ) -> Map:
-        """Resample patches of one datatype and average finite overlaps.
+        """ Resample patches of one datatype and average finite overlaps.
 
         At least one patch is required. Source maps are never modified.
         """
@@ -250,13 +259,14 @@ class SamplingUtils:
         mean = np.zeros((ys.size, xs.size), dtype=float)
         counts = np.zeros(mean.shape, dtype=np.int64)
         for m in maps:
-            sampled = SamplingUtils._sample_on_grid(m, xs, ys)
+            sampled = SamplingUtils.sample_on_grid(m, xs, ys)
             valid = np.isfinite(sampled)
             counts[valid] += 1
             # Incremental averaging avoids retaining a stack of resampled maps.
             weight = 1.0 / counts[valid]
             mean[valid] = mean[valid] * (1.0 - weight) + sampled[valid] * weight
         mean[counts == 0] = np.nan
+
         return Map(
             values=mean,
             granularity=spacing,
@@ -267,5 +277,5 @@ class SamplingUtils:
                 "sources": [{"title": m.title, "metadata": m.metadata} for m in maps],
             }),
             value_type=datatype,
-            title=f"{datatype.value} slice",
+            title=f"{datatype.value} world slice from",
         )
