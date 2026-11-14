@@ -1,5 +1,12 @@
+
 from dataclasses import dataclass
 from abc import ABCMeta
+from enum import Enum
+
+
+class ConstraintType(Enum):
+    THRESHOLD = "Threshold"
+    EXPONENTIAL = "Exponential"
 
 
 @dataclass()

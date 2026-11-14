@@ -11,6 +11,8 @@ class PenaltyMap:
         :param granularity:
         """
         self.granularity = granularity
+        # Lazy initialize of the numpy array
+        self.cost_map = None
 
     def get_obstructed_region(self):
         pass
@@ -30,3 +32,8 @@ class PenaltyMap:
     def to_pf_form(self) -> None:
         """ Converts the internal representation of the cost map to the one
         required for the path-finding library """
+        self.cost_map += 1.0
+        # +infinity should remain +infinity, or very, very large
+        # pathfinding wants to use a cost map which is 0 to represent
+        # unavailability of the region
+        self.cost_map[self.cost_map > 1e9] = 0.0

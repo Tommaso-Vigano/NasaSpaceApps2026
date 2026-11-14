@@ -20,5 +20,6 @@ class PenaltyManager(ABC):
         if isinstance(profile, ExpeditionProfile):
             maps = []
             result = PenaltyMap.reduce(maps)
-
+        else:
+            result = None
         return result
