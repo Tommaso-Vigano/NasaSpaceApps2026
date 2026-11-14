@@ -147,9 +147,9 @@ class PenaltyManager:
 
 
     def build_slopes_list(
-            self,
-            profile,
-            ElevationMap: Map,
+        self,
+        profile,
+        ElevationMap: Map,
     ) -> Iterable[SlopeCost]:
         """
         Yield (from_node, to_node, slope_cost) for adjacent cells.
@@ -207,10 +207,10 @@ class PenaltyManager:
 
                     # Great-circle horizontal distance using the haversine formula.
                     a = (
-                            sin(latitude_difference / 2.0) ** 2
-                            + cos(latitude_from)
-                            * cos(latitude_to)
-                            * sin(longitude_difference / 2.0) ** 2
+                        sin(latitude_difference / 2.0) ** 2
+                        + cos(latitude_from)
+                        * cos(latitude_to)
+                        * sin(longitude_difference / 2.0) ** 2
                     )
 
                     # Protect against floating-point rounding.

@@ -2,7 +2,7 @@
 
 from threading import RLock
 
-from flask import Flask, abort, jsonify, request, url_for
+from flask import Flask, abort, jsonify, render_template, request, url_for
 from werkzeug.exceptions import HTTPException
 
 from src.landmarks.registry import LandmarkRegistry
@@ -32,6 +32,10 @@ class WebServer:
                 abort(400, description=str(error))
 
     def _register_routes(self) -> None:
+        @self.app.get("/")
+        def index():
+            return render_template("index.html")
+
         @self.app.errorhandler(HTTPException)
         def http_error(error):
             response = error.get_response()
