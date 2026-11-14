@@ -6,13 +6,15 @@ from flask import Flask, abort, jsonify, render_template, request, url_for
 from werkzeug.exceptions import HTTPException
 
 from src.landmarks.registry import LandmarkRegistry
+from src.data.data_model import WorldModel
 
 
 class WebServer:
 
-    def __init__(self, landmarks: LandmarkRegistry) -> None:
+    def __init__(self, landmarks: LandmarkRegistry, world_model: WorldModel) -> None:
 
         self.landmarks = landmarks
+        self.world_model = world_model
         self._lock = RLock()
         self.app = Flask(__name__)
         self.app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
