@@ -1,21 +1,14 @@
+
+
 from dataclasses import dataclass
-from typing import Callable
 
 import numpy as np
-from numpy.typing import NDArray
 
-from src.data.map import Map
-from src.routing.profiles import Profile
-
-from .penalty_type import (
-    PenaltyType,
-    ProfileParameter,
-    resolve_parameter,
-)
+from .penalty import Penalty, PenaltyInput
 
 
-@dataclass(frozen=True)
-class WeightedPenalty(PenaltyType):
+@dataclass
+class WeightPenalty(Penalty):
     """
     Compute weight * severity.
 
@@ -23,37 +16,21 @@ class WeightedPenalty(PenaltyType):
     If omitted, the source values are used directly.
     """
 
-    weight: ProfileParameter = 1.0
-    severity: Callable[
-        [Map, Profile], NDArray[np.float64]
-    ] | None = None
+    weight: float
 
-    def compute(
-        self,
-        source: Map,
-        profile: Profile,
-    ) -> NDArray[np.float64]:
-        weight = resolve_parameter(self.weight, profile)
+    def __post_init__(self):
+        if not np.isfinite(self.weight) or self.weight < 0:
+            raise ValueError("weight must be finite and nonnegative.")
 
-        if weight < 0:
-            raise ValueError("weight must be nonnegative.")
+    def compute(self, values: PenaltyInput) -> PenaltyInput:
+        values = np.asarray(values, dtype=np.float64)
 
-        raw = np.asarray(source.values, dtype=np.float64)
+        if np.any(values < 0):
+            raise ValueError("Weighted penalty inputs must be nonnegative.")
 
-        severity = np.asarray(
-            self.severity(source, profile)
-            if self.severity is not None
-            else raw,
-            dtype=np.float64,
-        )
+        # Missing values remain blocked, including when weight is zero.
+        costs = np.full(values.shape, np.inf, dtype=np.float64)
+        valid = np.isfinite(values)
+        costs[valid] = self.weight * values[valid]
 
-        if np.any(severity < 0):
-            raise ValueError("severity must be nonnegative.")
-
-        valid = np.isfinite(raw) & np.isfinite(severity)
-        costs = np.full(raw.shape, np.inf, dtype=np.float64)
-
-        with np.errstate(over="raise", invalid="raise"):
-            costs[valid] = weight * severity[valid]
-
-        return costs
+        return costs.item() if costs.ndim == 0 else costs

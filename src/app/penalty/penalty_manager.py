@@ -1,13 +1,21 @@
 from dataclasses import replace
 from typing import Iterable
+from typing import Callable
 
 import numpy as np
 
 from src.data.map import Map
 from src.data.types import Datatype
-from src.routing.algorithm import SlopeCost, Node
+from src.routing.algorithm import SlopeCost
 from math import asin, atan2, cos, degrees, radians, sin, sqrt
 
+from src.routing.profiles import (
+    Profile,
+    HumanProfile,
+    RoverProfile,
+    ExpeditionProfile,
+)
+from src.app.penalty.implementations.progressive_cutoff import ProgressiveCutoff
 
 class PenaltyComponents:
     """Store the component penalty maps on the same grid."""
@@ -183,8 +191,29 @@ class PenaltyManager:
                         cost,
                     )
 
-    def select_slope_cost_function(self, profile):
-        """Return a function that converts a signed slope into a cost."""
-        raise NotImplementedError(
-            "The profile-dependent slope cost function is not implemented yet."
-        )
+    def select_slope_cost_function(
+            self,
+            profile: Profile,
+    ) -> Callable[[float], float]:
+        """Select a soft progressive cut-off for the absolute slope in degrees."""
+
+        def get_slope_limit(participant: Profile) -> float:
+            if isinstance(participant, ExpeditionProfile):
+                if not participant.profiles:
+                    raise ValueError("An expedition must contain participants.")
+
+                return min(
+                    get_slope_limit(member)
+                    for member in participant.profiles
+                )
+
+            if isinstance(participant, (HumanProfile, RoverProfile)):
+                return float(participant.hard_constraints["slope"])
+
+            raise TypeError(
+                f"Unsupported profile: {type(participant).__name__}"
+            )
+
+        limit = get_slope_limit(profile)
+
+        return ProgressiveCutoff(threshold=limit, weight=1.0)
