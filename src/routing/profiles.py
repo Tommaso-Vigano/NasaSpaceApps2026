@@ -6,7 +6,7 @@ from enum import Enum
 
 class ConstraintType(Enum):
     THRESHOLD = "Threshold"
-    EXPONENTIAL = "Exponential"
+    WEIGHED = "Weighed"
 
 
 @dataclass()
