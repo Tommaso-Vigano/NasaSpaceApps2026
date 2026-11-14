@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from src.models.constraints import MARS_RADIUS_M
+from src.constants import LANDER_ANTENNA_H_M, MARS_RADIUS_M
 
 
 def horizon_distance_m(h):
@@ -11,7 +11,7 @@ def horizon_distance_m(h):
     return np.sqrt(2.0 * MARS_RADIUS_M * np.asarray(h, dtype=np.float64))
 
 
-def viewshed(z, dx, dy, observer_rc, observer_h=2.0, target_h=1.8,
+def viewshed(z, dx, dy, observer_rc, observer_h=LANDER_ANTENNA_H_M, target_h=1.8,
              max_range_m=5000.0, n_rays=720):
     """Visibility mask (rows, cols) from ``observer_rc`` with radial rays.
 

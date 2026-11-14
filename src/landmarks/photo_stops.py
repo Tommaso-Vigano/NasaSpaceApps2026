@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from src.basic import Coordinate
+# Re-exported from here (scripts/demo_map.py imports them from this module).
+from src.constants import CAMERA_FOV_DEG, DEFAULT_FOV_DEG, MARS_RADIUS_M  # noqa: F401
 from src.landmarks.landmark import Landmark
 from src.landmarks.registry import LandmarkRegistry
-
-MARS_RADIUS_M = 3_396_190.0
 
 
 @dataclass
@@ -113,9 +113,8 @@ def turn_instruction(rel: float) -> str:
 # Coni di vista
 # ---------------------------------------------------------------------------
 
-# Campo di vista orizzontale (gradi) usato per disegnare i coni delle foto
-CAMERA_FOV_DEG = {"NAVCAM_LEFT": 45.0, "MCZ_LEFT": 15.0}
-DEFAULT_FOV_DEG = 45.0
+# Campo di vista orizzontale (gradi) usato per disegnare i coni delle foto:
+# CAMERA_FOV_DEG e DEFAULT_FOV_DEG in src/constants.py.
 
 
 def destination(lat, lon, bearing, dist_m):
@@ -282,8 +281,9 @@ def _travel_headings(p_lat: np.ndarray, p_lon: np.ndarray, window_m: float) -> n
 
     Al punto i la direzione è il bearing dal punto che si trova ~window_m/2 prima al punto
     ~window_m/2 dopo, misurando la distanza cumulativa lungo il percorso; ai bordi la finestra
-    è troncata. Serve perché il pathfinding su griglia senza diagonali produce scalini
-    N/E/N/E... su cui il bearing fra punti consecutivi oscilla fra 0° e 90°.
+    è troncata. Serve perché il pathfinding su griglia produce scalini (N/E/N/E... senza
+    diagonali, N/NE/N/NE... con le diagonali di GridGraph) su cui il bearing fra punti
+    consecutivi oscilla di 45° o 90°.
 
     Se i due estremi della finestra coincidono si usa il bearing del segmento non degenere
     più vicino (a parità, quello in avanti). Se tutti i punti coincidono, la direzione non è
