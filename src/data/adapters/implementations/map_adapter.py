@@ -18,7 +18,13 @@ from src.data.adapters.registry import AdapterRegistry
 
 @AdapterRegistry.register_adapter("Depth-dust")
 class MapAdapter(Adapter):
-    """Convert a north-up, single-band elevation raster into a Map."""
+
+    """Convert a north-up, single-band raster into a geographic Map.
+    Elevation is the default; explicitly select IMAGERY for an orthomosaic.
+    """
+
+    def __init__(self, value_type: Datatype = Datatype.ELEVATION) -> None:
+        self.value_type = value_type
 
     def adapt(self, data: str | Path) -> Map:
         """
@@ -32,7 +38,7 @@ class MapAdapter(Adapter):
         with rasterio.open(data) as source:
             if source.count != 1:
                 raise ValueError(
-                    "Expected a DEM with exactly one elevation band."
+                    "Expected a raster with exactly one scalar band."
                 )
 
             if source.crs is None:
@@ -101,6 +107,6 @@ class MapAdapter(Adapter):
                 top_left=top_left,
                 bottom_right=bottom_right,
                 metadata=metadata,
-                value_type=Datatype.ELEVATION,
-                title=f"Elevation Map {top_left[0]} {top_left[1]} {bottom_right[0]} {bottom_right[1]}",
+                value_type=self.value_type,
+                title=f"{self.value_type.value} Map {top_left[0]} {top_left[1]} {bottom_right[0]} {bottom_right[1]}",
             )
