@@ -151,5 +151,5 @@ class GlobeLayers:
             units = source.units[0]
             if (not is_rgb and not units and source.dtypes[0] == "uint8"
                     and source.scales[0] == 1 and source.offsets[0] == 0):
-                units = "DN (encoded raster values)"
+                units = "DN"
             return output, units

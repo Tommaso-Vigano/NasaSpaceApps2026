@@ -8,24 +8,48 @@
 </head>
 <body>
     <canvas id="region-canvas" aria-label="Regional map. Drag to pan; scroll to zoom."></canvas>
-    <header><a href="{{ url_for('planet') }}">Back to Mars</a><h1>{{ region.title }}</h1>
-        <p>Drag to pan. Scroll to zoom.</p></header>
+    <header>
+        <a class="back-link" href="{{ url_for('planet') }}" aria-label="Back to Mars" title="Back to Mars">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg>
+        </a>
+        <h1>{{ region.title }}</h1>
+    </header>
     <aside class="routing-panel" aria-label="Route planning">
-        <div class="mouse-coordinate"><span>Mouse latitude, longitude</span>
-            <output id="mouse-coordinate">Move over the map</output></div>
-        <h2>Plan a route</h2>
-        <p>Right-click to set start, then destination.</p>
-        <ol id="route-endpoints"><li>Start: not selected</li><li>Destination: not selected</li></ol>
-        <label for="subdivisions">Grid subdivisions <output id="subdivision-value">100</output></label>
+        <div class="mouse-coordinate"><span>Cursor (lat, lon)</span>
+            <output id="mouse-coordinate">—</output></div>
+        <ul id="route-endpoints" aria-label="Endpoints in latitude, longitude" title="Right-click the map to set Start, then End."><li>Start: —</li><li>End: —</li></ul>
+        <label for="subdivisions">Subdivisions <output id="subdivision-value">100</output></label>
         <input id="subdivisions" type="range" min="10" max="1000" step="1" value="100">
         <small id="grid-estimate"></small>
         <div class="route-actions">
             <button id="calculate-route" disabled>Find route</button>
             <button id="clear-endpoints" disabled>Clear points</button>
         </div>
-        <p id="route-status" role="status">Select two points to begin.</p>
-        <small>Elevation and human slope profile. Endpoints snap to grid centres; curve rounding is visual only.</small>
+        <p id="route-status" role="status"></p>
     </aside>
+    <aside class="constraints-panel" aria-label="Constraint views">
+        <h2>Constraints</h2>
+        <p id="constraints-status">Calculate a route to see its constraints.</p>
+        <div id="constraint-options"></div>
+    </aside>
+    {% if region.photos_url %}
+    <div id="photo-markers" aria-label="Perseverance photo stops"></div>
+    <aside class="photos-control" aria-label="Mission photos">
+        <label><input id="photos-visible" type="checkbox" checked> Perseverance photos</label>
+        <small id="photos-status" role="status">Loading stops…</small>
+    </aside>
+    <dialog id="photo-stop" aria-labelledby="photo-stop-title">
+        <div class="photo-heading"><strong id="photo-stop-title"></strong>
+            <button id="photo-stop-close" aria-label="Close photo stop">&times;</button></div>
+        <p id="photo-stop-coordinates"></p>
+        <div id="photo-thumbnails"></div>
+    </dialog>
+    <dialog id="photo-viewer" aria-label="Perseverance mission photo">
+        <div class="photo-heading"><strong>Perseverance</strong>
+            <button id="photo-viewer-close" aria-label="Close photo">&times;</button></div>
+        <figure><img id="photo-full" alt=""><figcaption id="photo-caption"></figcaption></figure>
+    </dialog>
+    {% endif %}
     <nav aria-label="Map controls">
         <button id="zoom-in" aria-label="Zoom in">+</button>
         <button id="zoom-out" aria-label="Zoom out">&minus;</button>
@@ -33,6 +57,7 @@
     </nav>
     <p id="map-status" role="status">Loading region...</p>
     <script id="region-config" type="application/json">{{ region | tojson }}</script>
+    <script src="{{ url_for('static', filename='region_photos.js') }}"></script>
     <script src="{{ url_for('static', filename='region.js') }}"></script>
 </body>
 </html>

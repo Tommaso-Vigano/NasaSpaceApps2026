@@ -13,16 +13,22 @@ from src.data.data_model import WorldModel
 from src.data.types import Datatype
 from src.server.globe_layers import GlobeLayers
 from src.server.regions import Regions
+from src.server.perseverance_photos import PerseverancePhotos
 
 
 class WebServer:
 
     def __init__(self, landmarks: LandmarkRegistry, world_model: WorldModel,
-                 globe_layers_path: str | Path | None = None) -> None:
+                 globe_layers_path: str | Path | None = None,
+                 perseverance_photos_path: str | Path | None = None) -> None:
 
         self.landmarks = landmarks
         self.world_model = world_model
         self.regions = Regions(world_model)
+        self.perseverance_photos = PerseverancePhotos(
+            self.regions, perseverance_photos_path if perseverance_photos_path is not None
+            else Path(__file__).resolve().parents[2] / 'data/perseverance_photos',
+        )
         self.globe_layers = GlobeLayers(
             globe_layers_path if globe_layers_path is not None
             else Path(__file__).resolve().parents[2] / "data/globe_layers"
@@ -70,7 +76,19 @@ class WebServer:
                 abort(400, description=str(error))
             info["frame_url"] = url_for("region_frame", sector_id=sector_id)
             info["route_url"] = url_for("region_route", sector_id=sector_id)
+            if self.perseverance_photos.available(sector_id):
+                info['photos_url'] = url_for('region_photos', sector_id=sector_id)
             return render_template("region.html", region=info)
+
+        @self.app.get('/api/regions/<sector_id>/photos')
+        def region_photos(sector_id):
+            try:
+                return jsonify(self.perseverance_photos.collection(sector_id))
+            except KeyError:
+                abort(404, description='No mission photos are available for this sector.')
+            except (ValueError, OSError) as error:
+                self.app.logger.warning('Cannot load Perseverance photos: %s', error)
+                abort(422, description='Could not load the local photo collection.')
 
         @self.app.post("/api/regions/<sector_id>/route")
         def region_route(sector_id):
@@ -83,7 +101,9 @@ class WebServer:
                 abort(429, description="Another route is being computed. Please try again shortly.")
             try:
                 return jsonify(route_region(self.regions, sector_id, payload))
-            except (NoRouteError, PenaltyError) as error:
+            except NoRouteError as error:
+                return jsonify(error=str(error), heatmaps=error.heatmaps), 422
+            except PenaltyError as error:
                 abort(422, description=str(error))
             except TimeoutError as error:
                 abort(504, description=str(error))

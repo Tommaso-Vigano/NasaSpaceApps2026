@@ -44,6 +44,7 @@ class RoutingExecutor:
 
         self.penalty_manager = PenaltyManager()
         self.grid_graph: GridGraph | None = None
+        self.constraint_maps: dict[str, np.ndarray] = {}
 
     @staticmethod
     def load_profile_from_json(json: dict) -> Profile:
@@ -135,6 +136,7 @@ class RoutingExecutor:
         elevation_map: Map,
         allow_diagonal: bool = True,
         compact: bool = False,
+        collect_heatmaps: bool = False,
     ) -> RoutingResult:
         """
         Compute a route using an already aligned WorldSlice.
@@ -146,6 +148,8 @@ class RoutingExecutor:
         Bounds must not cross the longitude seam.
         PenaltyError exceptions propagate to the caller.
         """
+        self.constraint_maps = {}
+        self.penalty_manager.component_maps = []
         for point in (start, end):
             if not (
                 self.top_left.lon <= point.lon <= self.bot_right.lon
@@ -201,6 +205,14 @@ class RoutingExecutor:
 
         costs[~inside] = 0.0
 
+        if collect_heatmaps:
+            self.constraint_maps.update({
+                component.title: component.values
+                for component in self.penalty_manager.component_maps
+            })
+            if layers:
+                self.constraint_maps['Combined cell cost'] = np.where(costs > 0, costs, np.inf)
+
         if compact:
             from src.routing.compact import shortest_path
             source = self._coordinate_to_node(start, elevation_map)
@@ -209,6 +221,7 @@ class RoutingExecutor:
                 costs, elevation_map, source, target,
                 self.penalty_manager.select_slope_cost_function(self.profile),
                 self.penalty_manager.MARS_RADIUS, allow_diagonal,
+                heatmaps=self.constraint_maps if collect_heatmaps else None,
             )
             return RoutingResult(path, [
                 (elevation_map.top_left[0] + column*dx,

@@ -403,12 +403,12 @@
             const legend = $('layer-legend');
             const textures = new Map();
             let requestVersion = 0;
+            let activeLayer = 'surface';
             function applyLayer(id, texture, metadata) {
                 material.map = texture;
                 material.needsUpdate = true;
-                options.querySelectorAll('button').forEach((button) => {
-                    button.setAttribute('aria-pressed', String(button.dataset.layer === id));
-                });
+                activeLayer = id;
+                options.value = id;
                 legend.hidden = !metadata;
                 const isImage = metadata && metadata.legend_type === 'image';
                 $('layer-scale').hidden = !metadata || isImage;
@@ -416,8 +416,8 @@
                 $('layer-units').textContent = isImage
                     ? 'Pre-colored imagery. Numeric color scale unavailable in this file.'
                     : metadata ? (metadata.units || 'Dimensionless') : '';
-                status.textContent = metadata ? metadata.label
-                    + (metadata.legend_type === 'image' ? ' | source image colours' : '') : 'Surface imagery';
+                status.hidden = true;
+                status.textContent = '';
                 if (metadata && metadata.legend_type !== 'image') {
                     const number = (value) => new Intl.NumberFormat(undefined,
                         {maximumSignificantDigits: 4}).format(value);
@@ -429,7 +429,8 @@
                 }
                 if (isImage || !metadata) legend.removeAttribute('title');
             }
-            $('layer-options').querySelector('[data-layer="surface"]').addEventListener('click', () => {
+            options.addEventListener('change', () => {
+                if (options.value !== 'surface') return;
                 requestVersion++;
                 options.removeAttribute('aria-busy');
                 applyLayer('surface', colorMap, null);
@@ -439,16 +440,18 @@
                 if (!response.ok) throw new Error('Could not load visualization modes');
                 const catalog = await response.json();
                 for (const layer of catalog.layers) {
-                    const button = document.createElement('button');
-                    button.type = 'button';
-                    button.dataset.layer = layer.id;
-                    button.textContent = layer.label;
-                    button.setAttribute('aria-pressed', 'false');
-                    button.disabled = !layer.available;
-                    if (!layer.available) button.title = 'This dataset is not currently available';
-                    options.append(button);
-                    button.addEventListener('click', async () => {
+                    const option = document.createElement('option');
+                    option.value = layer.id;
+                    option.textContent = layer.label;
+                    option.disabled = !layer.available;
+                    if (!layer.available) option.title = 'This dataset is not currently available';
+                    options.append(option);
+                }
+                options.addEventListener('change', async () => {
+                        const layer = catalog.layers.find(layer => layer.id === options.value);
+                        if (!layer || !layer.available) return;
                         const version = ++requestVersion;
+                        status.hidden = false;
                         status.textContent = 'Loading ' + layer.label.toLowerCase() + '...';
                         options.setAttribute('aria-busy', 'true');
                         try {
@@ -472,18 +475,22 @@
                             if (version === requestVersion) applyLayer(layer.id, texture, metadata);
                         } catch (error) {
                             console.warn(error);
-                            if (version === requestVersion)
+                            if (version === requestVersion) {
+                                options.value = activeLayer;
                                 status.textContent = 'Could not load ' + layer.label.toLowerCase()
-                                    + '. Current view retained; click to retry.';
+                                    + '. Select it again to retry.';
+                            }
                         } finally {
                             if (version === requestVersion) options.removeAttribute('aria-busy');
                         }
-                    });
-                }
-                if (!catalog.layers.some((layer) => layer.available))
+                });
+                if (!catalog.layers.some((layer) => layer.available)) {
+                    status.hidden = false;
                     status.textContent = 'Surface imagery | additional datasets unavailable';
+                }
             } catch (error) {
                 console.warn(error);
+                status.hidden = false;
                 status.textContent = 'Surface imagery | additional modes unavailable';
             }
         }
@@ -981,6 +988,7 @@
             window.location.assign(url);
         });
         function showRegion(bounds, message) {
+            $('region-status').hidden = !bounds;
             $('region-status').textContent = message;
             $('region-bounds').hidden = !bounds;
             $('region-clear').hidden = !bounds;

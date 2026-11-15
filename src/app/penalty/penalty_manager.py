@@ -1,8 +1,8 @@
-from dataclasses import replace, fields
+from dataclasses import replace
 from enum import Enum
 from math import asin, atan2, cos, degrees, radians, sin, sqrt
 from typing import Callable, Iterable
-import json
+
 import numpy as np
 
 from src.data.map import Map
@@ -16,13 +16,7 @@ from src.routing.profiles import (
 )
 
 from .implementations.penalty import Penalty
-from .implementations.combined_penalty import CombinedPenalty
-from .implementations.cutoff_penalty import CutOffPenalty
-from .implementations.lower_cutoff_penalty import LowerCutOffPenalty
 from .implementations.progressive_cutoff import ProgressiveCutoff
-from .implementations.soft_threshold_penalty import SoftThresholdPenalty
-from .implementations.weighing_penalty import WeightPenalty
-from .implementations.zero_penalty import ZeroPenalty
 
 
 class PenaltyErrorCode(Enum):
@@ -39,12 +33,15 @@ class PenaltyErrorCode(Enum):
 
 
 class PenaltyError(Exception):
+    """Exception containing a code that the caller can inspect."""
+
     def __init__(self, code: PenaltyErrorCode, message: str):
         self.code = code
         super().__init__(f"{code.value}: {message}")
 
 
 def _penalty_values(values):
+    """Convert penalties to floats and reject negative costs."""
     try:
         values = np.asarray(values, dtype=np.float64)
     except (TypeError, ValueError, OverflowError) as error:
@@ -59,14 +56,18 @@ def _penalty_values(values):
             "Penalties must be nonnegative.",
         )
 
+    # NaN and positive infinity are permitted: they mean blocked.
     return values
 
 
 class PenaltyComponents:
+    """Store component maps whose grids already align."""
+
     def __init__(self, maps: Iterable[Map]):
         self.maps = list(maps)
 
     def get_total_penalty(self) -> Map:
+        """Sum raw penalties without adding the movement baseline."""
         if not self.maps:
             raise PenaltyError(
                 PenaltyErrorCode.EMPTY_COMPONENTS,
@@ -77,8 +78,11 @@ class PenaltyComponents:
         total = np.zeros_like(reference.values, dtype=np.float64)
 
         for penalty_map in self.maps:
+            # Check each component before summing, so negative costs
+            # cannot be hidden by positive costs from another component.
             values = _penalty_values(penalty_map.values)
 
+            # Overflow and missing data become blocked cells downstream.
             with np.errstate(over="ignore", invalid="ignore"):
                 total += values
 
@@ -95,108 +99,20 @@ PenaltySelector = Callable[[Profile], Penalty]
 
 
 class PenaltyManager:
+    """Build graph cell costs and apply directional slope penalties."""
+
     MAX_GRAPH_COST = 1e9
-    MARS_RADIUS = 3_389_500.0
+    MARS_RADIUS = 3_389_500.0  # Metres; spherical approximation.
 
     def __init__(self):
         self.penalties: dict[Datatype, PenaltySelector] = {}
-        self._configured_penalties: dict[Datatype, Penalty] | None = None
-        self.slope_enabled = True
-
-    def configure_from_json(self, profile: Profile, config: dict) -> None:
-        if not isinstance(config, dict):
-            raise ValueError("Expected a JSON object of layer names and booleans.")
-
-        supported = {
-            "SLOPE",
-            "STEP_HEIGHT",
-            "TERRAIN_ETA",
-            "THERMAL_INERTIA",
-            "LANDER_DISTANCE",
-            "RETURN_TIME",
-            "EVA_TIME",
-            "VISIBILITY",
-            "DUST_TAU",
-            "SOLAR_FLUX",
-            "ALBEDO",
-        }
-
-        for name, enabled in config.items():
-            if name not in {dt.name for dt in Datatype} | {"SLOPE"}:
-                raise ValueError(f"Unknown layer: {name}")
-            if type(enabled) is not bool:
-                raise ValueError(f"{name} must be true or false.")
-            if enabled and name not in supported:
-                raise ValueError(f"No built-in penalty for {name}.")
-
-        rules = self._profile_penalties(profile)
-        slope_enabled = config.get("SLOPE", False)
-
-        if slope_enabled:
-            self._get_slope_limit(profile)
-
-        self._configured_penalties = {
-            data_type: penalty
-            for data_type, penalty in rules.items()
-            if config.get(data_type.name, False)
-        }
-        self.slope_enabled = slope_enabled
-
-    def _profile_penalties(self, profile: Profile) -> dict[Datatype, Penalty]:
-        if isinstance(profile, ExpeditionProfile):
-            if not profile.profiles:
-                raise ValueError("An expedition must contain participants.")
-
-            members = [
-                self._profile_penalties(member)
-                for member in profile.profiles
-            ]
-
-            return {
-                data_type: CombinedPenalty([
-                    member.get(data_type, ZeroPenalty())
-                    for member in members
-                ])
-                for data_type in set().union(
-                    *(member.keys() for member in members)
-                )
-            }
-
-        rules = {
-            Datatype.VISIBILITY: WeightPenalty(0.5),
-            Datatype.ALBEDO: WeightPenalty(2.0),
-            Datatype.DUST_TAU: CutOffPenalty(2.0),
-            Datatype.SOLAR_FLUX: LowerCutOffPenalty(100.0),
-        }
-
-        if isinstance(profile, HumanProfile):
-            rules.update({
-                Datatype.STEP_HEIGHT: CutOffPenalty(0.30),
-                Datatype.TERRAIN_ETA: SoftThresholdPenalty(1.0, 1.0),
-                Datatype.LANDER_DISTANCE: CutOffPenalty(2000.0),
-                Datatype.RETURN_TIME: CutOffPenalty(1800.0),
-                Datatype.EVA_TIME: CutOffPenalty(21600.0),
-            })
-
-        elif isinstance(profile, RoverProfile):
-            rules.update({
-                Datatype.STEP_HEIGHT: CutOffPenalty(0.40),
-                Datatype.TERRAIN_ETA: CutOffPenalty(1.5),
-                Datatype.THERMAL_INERTIA: LowerCutOffPenalty(100.0),
-            })
-
-        else:
-            raise ValueError(
-                f"Unsupported profile: {type(profile).__name__}"
-            )
-
-        return rules
 
     def register_penalty(
         self,
         data_type: Datatype,
         selector: PenaltySelector,
     ) -> None:
+        """Register a function that selects a penalty from a profile."""
         if not isinstance(data_type, Datatype) or not callable(selector):
             raise PenaltyError(
                 PenaltyErrorCode.INVALID_REGISTRATION,
@@ -210,12 +126,7 @@ class PenaltyManager:
         profile: Profile,
         data_type: Datatype,
     ) -> Penalty:
-        if self._configured_penalties is not None:
-            return self._configured_penalties.get(
-                data_type,
-                ZeroPenalty(),
-            )
-
+        """Return the configured penalty for a map category."""
         if data_type not in self.penalties:
             raise PenaltyError(
                 PenaltyErrorCode.PENALTY_NOT_REGISTERED,
@@ -241,6 +152,7 @@ class PenaltyManager:
         return penalty
 
     def _get_slope_limit(self, profile: Profile) -> float:
+        """Use the strictest participant limit for an expedition."""
         if isinstance(profile, ExpeditionProfile):
             if not profile.profiles:
                 raise PenaltyError(
@@ -282,12 +194,10 @@ class PenaltyManager:
         return limit
 
     def select_slope_cost_function(self, profile: Profile) -> Penalty:
-        if not self.slope_enabled:
-            return ZeroPenalty()
-
+        """Increase slope cost progressively, then block at the limit."""
         return ProgressiveCutoff(
             threshold=self._get_slope_limit(profile),
-            weight=8.0,
+            weight=1.0,
         )
 
     def _construct_cost_pipeline(
@@ -295,6 +205,7 @@ class PenaltyManager:
         profile: Profile,
         world_slice: Iterable[Map],
     ) -> PenaltyComponents:
+        """Compute a raw penalty map for each supplied layer."""
         penalty_maps = []
 
         for source_map in world_slice:
@@ -334,10 +245,21 @@ class PenaltyManager:
         profile: Profile,
         world_slice: Iterable[Map],
     ) -> Map:
+        """
+        Compute cell costs ready for the existing GridGraph.
+
+        Raw penalty 0       -> graph cost 1.
+        Finite penalty      -> penalty + 1.
+        Missing/infinite    -> graph cost 0.
+        Result above 1e9    -> graph cost 0.
+
+        Zero graph cost means blocked.
+        """
         components = self._construct_cost_pipeline(profile, world_slice)
         total_penalty = components.get_total_penalty()
         values = _penalty_values(total_penalty.values)
 
+        # Add the movement baseline exactly once.
         with np.errstate(over="ignore"):
             graph_costs = values + 1.0
 
@@ -362,6 +284,15 @@ class PenaltyManager:
         profile: Profile,
         ElevationMap: Map,
     ) -> Iterable[SlopeCost]:
+        """
+        Yield directed slope penalties between eight neighbouring cells.
+
+        Nodes are (column, row).
+        Elevations are metres; grid spacing is longitude/latitude degrees.
+
+        Missing elevations are skipped here. apply_slope_penalties()
+        removes those nodes from the graph.
+        """
         elevations = np.asarray(ElevationMap.values, dtype=np.float64)
         rows, columns = elevations.shape
 
@@ -406,6 +337,7 @@ class PenaltyManager:
                     dlat = latitude_to - latitude_from
                     dlon = radians(dc * delta_lon)
 
+                    # Horizontal distance on a spherical Mars.
                     a = (
                         sin(dlat / 2.0) ** 2
                         + cos(latitude_from)
@@ -419,6 +351,7 @@ class PenaltyManager:
                     )
 
                     if distance <= 1e-9:
+                        # Do not leave an uncomputed edge traversable.
                         yield (
                             (column, row),
                             (next_column, next_row),
@@ -461,9 +394,18 @@ class PenaltyManager:
         profile: Profile,
         elevation_map: Map,
     ) -> None:
-        if self.slope_enabled:
-            self._get_slope_limit(profile)
+        """
+        Apply slopes without changing the GridGraph implementation.
 
+        Missing elevations remove nodes.
+        Infinite, missing, or excessive slope penalties remove edges.
+        Finite penalties, including zero, are added to base edge costs.
+        """
+        # Validate the profile before changing the graph.
+        self._get_slope_limit(profile)
+
+        # Skipping missing elevations during slope calculation alone
+        # would otherwise leave their original graph connections intact.
         missing = ~np.isfinite(elevation_map.values)
 
         grid_graph.graph.remove_nodes_from(
@@ -477,6 +419,7 @@ class PenaltyManager:
         ):
             if not grid_graph.graph.has_edge(source, target):
                 continue
+
 
             grid_graph.apply_slope_costs([
                 (source, target, cost)

@@ -7,14 +7,18 @@ from pyproj import CRS, Transformer
 import rasterio
 from rasterio.windows import Window
 
+from src.app.penalty.configure_penalty import configure_penalties
 from src.app.routing_executor import RoutingExecutor
 from src.basic import Coordinate
 from src.data.data_model import WorldModel
 from src.routing.profiles import HumanProfile
+from src.server.constraint_heatmaps import encode_heatmaps
 
 
 class NoRouteError(ValueError):
-    pass
+    def __init__(self, message, heatmaps=None):
+        super().__init__(message)
+        self.heatmaps = heatmaps
 
 
 def route_region(regions, sector_id, payload):
@@ -70,9 +74,21 @@ def route_region(regions, sector_id, payload):
                                    Coordinate(lat=reference.bottom_right[1], lon=reference.bottom_right[0]),
                                    HumanProfile())
 
-        result = executor.execute(world_slice, *points, elevation_map=elevation, compact=True)
+        """
+        configure_penalties(
+            executor.penalty_manager,
+            temperature_limit=300.0,
+            albedo_weight=2.0,
+            # radiation_threshold=10.0,
+            # radiation_weight=2.0,
+        )
+        """
+        result = executor.execute(world_slice, *points, elevation_map=elevation, compact=True,
+                                  collect_heatmaps=True)
+        heatmaps = encode_heatmaps(executor.constraint_maps, elevation, projected, inverse)
         if not result.found:
-            raise NoRouteError("No traversable route was found at this fineness. Try different endpoints or subdivisions.")
+            raise NoRouteError("No traversable route was found at this fineness. Try different endpoints or subdivisions.",
+                               heatmaps)
         coordinates = np.asarray(result.coordinates)
         wx, wy = projected.transform(coordinates[:, 0], coordinates[:, 1], errcheck=True)
         pixel_x = inverse.a*wx + inverse.b*wy + inverse.c
@@ -80,4 +96,5 @@ def route_region(regions, sector_id, payload):
         return {"path": np.stack((pixel_x, pixel_y), axis=-1).tolist(),
                 "coordinates": result.coordinates, "total_cost": result.total_cost,
                 "grid_shape": list(elevation.values.shape), "granularity": list(precision),
-                "subdivisions": subdivisions, "profile": "human", "layers": ["elevation"]}
+                "subdivisions": subdivisions, "profile": "human", "layers": ["elevation"],
+                "heatmaps": heatmaps}

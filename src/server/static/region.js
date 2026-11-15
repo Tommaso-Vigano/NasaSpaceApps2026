@@ -6,6 +6,7 @@
     const status = document.getElementById('map-status');
     let view, frame = null, drag = null, timer, controller, generation = 0;
     const initial = config.initial_view;
+    const photos = window.createPhotoStops(config, canvas);
     const endpoints = [];
     let route = [], routeController = null, routing = false;
     const routeStatus = document.getElementById('route-status');
@@ -13,6 +14,86 @@
     const clearButton = document.getElementById('clear-endpoints');
     const subdivisionSlider = document.getElementById('subdivisions');
     const mouseCoordinate = document.getElementById('mouse-coordinate');
+    const constraintOptions = document.getElementById('constraint-options');
+    const constraintStatus = document.getElementById('constraints-status');
+    // Older cached templates nest this inside the blurred routing panel,
+    // which makes fixed positioning relative to that panel, not the viewport.
+    const constraintsPanel = constraintOptions.closest('.constraints-panel');
+    if (constraintsPanel.parentElement !== document.body) document.body.append(constraintsPanel);
+    let heatmaps = null;
+
+    function clearHeatmaps() {
+        heatmaps = null;
+        constraintOptions.replaceChildren();
+        constraintStatus.textContent = 'Calculate a route to see its constraints.';
+    }
+    async function loadHeatmaps(data) {
+        if (!data) return;
+        const layers = await Promise.all(data.layers.map(async (layer, index) => {
+            const image = new Image();
+            image.src = layer.image;
+            await image.decode();
+            return {...layer, image, visible: index === 0};
+        }));
+        heatmaps = {...data, layers};
+        constraintOptions.replaceChildren();
+        constraintStatus.textContent = 'Toggle overlays. Sharp cells show the routing grid; missing data is transparent.';
+        layers.forEach((layer) => {
+            const row = document.createElement('div'); row.className = 'constraint-option';
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
+            checkbox.checked = layer.visible;
+            checkbox.addEventListener('change', () => { layer.visible = checkbox.checked; draw(); });
+            const title = document.createElement('span'); title.textContent = layer.title;
+            label.append(checkbox, title);
+            const gradient = document.createElement('div'); gradient.className = 'constraint-gradient';
+            gradient.style.background = 'linear-gradient(to right, ' + layer.colors.join(', ') + ')';
+            const range = document.createElement('small');
+            const number = (value) => new Intl.NumberFormat(undefined, {maximumSignificantDigits: 3}).format(value);
+            range.textContent = (layer.minimum === null ? 'No finite values' : number(layer.minimum) + ' – ' + number(layer.maximum))
+                + ' | magenta: blocked';
+            row.append(label, gradient, range); constraintOptions.append(row);
+        });
+    }
+    function drawHeatmaps() {
+        if (!heatmaps) return;
+        const mesh = heatmaps.pixel_mesh;
+        const nr = mesh.length - 1, nc = mesh[0].length - 1;
+        const [rows, cols] = heatmaps.shape;
+        const screen = (p) => [(p[0]-view.x)/view.width*canvas.width, (p[1]-view.y)/view.height*canvas.height];
+        // Place native-resolution PNG cells through a small georeferencing
+        // mesh. No numeric grid resampling or image smoothing is performed.
+        context.save(); context.globalAlpha = .55; context.imageSmoothingEnabled = false;
+        context.beginPath();
+        context.rect(-view.x/view.width*canvas.width, -view.y/view.height*canvas.height,
+                     config.width/view.width*canvas.width, config.height/view.height*canvas.height);
+        context.clip();
+        function triangle(image, source, target) {
+            if (Math.max(...target.map(p => p[0])) < 0 || Math.min(...target.map(p => p[0])) > canvas.width
+                || Math.max(...target.map(p => p[1])) < 0 || Math.min(...target.map(p => p[1])) > canvas.height) return;
+            const [s0, s1, s2] = source, [p0, p1, p2] = target;
+            const ux = s1[0]-s0[0], uy = s1[1]-s0[1], vx = s2[0]-s0[0], vy = s2[1]-s0[1];
+            const det = ux*vy-uy*vx;
+            const a = ((p1[0]-p0[0])*vy-(p2[0]-p0[0])*uy)/det;
+            const c = ((p2[0]-p0[0])*ux-(p1[0]-p0[0])*vx)/det;
+            const b = ((p1[1]-p0[1])*vy-(p2[1]-p0[1])*uy)/det;
+            const d = ((p2[1]-p0[1])*ux-(p1[1]-p0[1])*vx)/det;
+            context.save(); context.beginPath(); context.moveTo(...p0); context.lineTo(...p1); context.lineTo(...p2);
+            context.closePath(); context.clip();
+            context.transform(a, b, c, d, p0[0]-a*s0[0]-c*s0[1], p0[1]-b*s0[0]-d*s0[1]);
+            context.drawImage(image, 0, 0); context.restore();
+        }
+        heatmaps.layers.filter(layer => layer.visible).forEach((layer) => {
+            for (let r = 0; r < nr; r++) for (let c = 0; c < nc; c++) {
+                const source = [[c*cols/nc, r*rows/nr], [(c+1)*cols/nc, r*rows/nr],
+                                [(c+1)*cols/nc, (r+1)*rows/nr], [c*cols/nc, (r+1)*rows/nr]];
+                const target = [mesh[r][c], mesh[r][c+1], mesh[r+1][c+1], mesh[r+1][c]].map(screen);
+                for (const indices of [[0, 1, 2], [0, 2, 3]])
+                    triangle(layer.image, indices.map(i => source[i]), indices.map(i => target[i]));
+            }
+        });
+        context.restore();
+    }
 
     function pixelAt(event) {
         const rect = canvas.getBoundingClientRect();
@@ -35,28 +116,29 @@
     }
     function formatPoint(point) {
         const [lon, lat] = geographic(point);
-        return lat.toFixed(5) + ', ' + (((lon+180)%360+360)%360-180).toFixed(5) + ' degrees';
+        return '(' + lat.toFixed(5) + ', ' + (((lon+180)%360+360)%360-180).toFixed(5) + ')';
     }
     function updateRouteControls() {
         routeButton.disabled = routing || endpoints.length !== 2;
         clearButton.disabled = routing || endpoints.length === 0;
         subdivisionSlider.disabled = routing;
         const list = document.getElementById('route-endpoints');
-        list.replaceChildren(...['Start', 'Destination'].map((name, index) => {
+        list.replaceChildren(...['Start', 'End'].map((name, index) => {
             const item = document.createElement('li');
-            item.textContent = name + ': ' + (endpoints[index] ? formatPoint(endpoints[index]) : 'not selected');
+            item.textContent = name + ': ' + (endpoints[index] ? formatPoint(endpoints[index]) : '—');
             return item;
         }));
     }
     function updateFineness() {
+        clearHeatmaps();
         const amount = Number(subdivisionSlider.value);
         document.getElementById('subdivision-value').textContent = amount;
         const columns = Math.min(config.width-1, amount)+1;
         const rows = Math.min(config.height-1, amount)+1;
         document.getElementById('grid-estimate').textContent =
-            'About ' + columns + ' x ' + rows + ' nodes across this sector; capped at native detail.';
+            columns + ' × ' + rows + ' grid';
         route = [];
-        routeStatus.textContent = endpoints.length === 2 ? 'Ready to calculate with this fineness.' : 'Select two points to begin.';
+        routeStatus.textContent = '';
         if (view) draw();
     }
     function drawRouting() {
@@ -100,25 +182,24 @@
         const point = pixelAt(event);
         if (!point) { routeStatus.textContent = 'Select a point inside the sector.'; return; }
         if (endpoints.length === 2) endpoints.length = 0;
-        endpoints.push(point); route = [];
-        routeStatus.textContent = endpoints.length === 2 ? 'Ready. Find route, or right-click to start a new pair.'
-            : 'Start selected. Right-click a destination.';
+        endpoints.push(point); route = []; clearHeatmaps();
+        routeStatus.textContent = '';
         updateRouteControls(); draw();
     });
     canvas.addEventListener('pointermove', (event) => {
         const point = pixelAt(event);
         mouseCoordinate.textContent = point ? formatPoint(point) : 'Outside sector';
     });
-    canvas.addEventListener('pointerleave', () => { mouseCoordinate.textContent = 'Move over the map'; });
+    canvas.addEventListener('pointerleave', () => { mouseCoordinate.textContent = '—'; });
     clearButton.addEventListener('click', () => {
-        endpoints.length = 0; route = [];
-        routeStatus.textContent = 'Select two points to begin.';
+        endpoints.length = 0; route = []; clearHeatmaps();
+        routeStatus.textContent = '';
         updateRouteControls(); draw();
     });
     subdivisionSlider.addEventListener('input', updateFineness);
     routeButton.addEventListener('click', async () => {
         if (routing || endpoints.length !== 2) return;
-        routing = true; route = []; updateRouteControls(); draw();
+        routing = true; route = []; clearHeatmaps(); updateRouteControls(); draw();
         routeStatus.textContent = 'Computing route...';
         routeController = new AbortController();
         try {
@@ -127,6 +208,8 @@
                 body: JSON.stringify({start: endpoints[0], end: endpoints[1], subdivisions: Number(subdivisionSlider.value)}),
             });
             const result = await response.json();
+            try { await loadHeatmaps(result.heatmaps); }
+            catch (error) { constraintStatus.textContent = 'Constraint previews could not be loaded.'; console.warn(error); }
             if (!response.ok) throw new Error(result.error || 'Routing failed.');
             if (!result.path.length) throw new Error('No route was found.');
             route = result.path;
@@ -149,14 +232,17 @@
             : Math.max(0, Math.min(config.height - view.height, view.y));
     }
     function draw() {
+        photos.update(view);
         context.fillStyle = '#22272e';
         context.fillRect(0, 0, canvas.width, canvas.height);
-        if (!frame) { drawRouting(); return; }
-        const bounds = frame.bounds;
-        context.drawImage(frame.image,
+        if (frame) {
+            const bounds = frame.bounds;
+            context.drawImage(frame.image,
             (bounds.x-view.x)/view.width*canvas.width,
             (bounds.y-view.y)/view.height*canvas.height,
             bounds.width/view.width*canvas.width, bounds.height/view.height*canvas.height);
+        }
+        drawHeatmaps();
         drawRouting();
     }
     function schedule() {
@@ -222,7 +308,7 @@
     canvas.addEventListener('wheel', (event) => {
         event.preventDefault();
         const rect = canvas.getBoundingClientRect();
-        zoom(Math.exp(Math.max(-0.5, Math.min(0.5, event.deltaY*0.0015))),
+        zoom(Math.exp(Math.max(-0.8, Math.min(0.8, event.deltaY*0.003))),
              (event.clientX-rect.left)/rect.width, (event.clientY-rect.top)/rect.height);
     }, {passive: false});
     canvas.addEventListener('pointerdown', (event) => {

@@ -8,12 +8,12 @@ import numpy as np
 
 
 def shortest_path(costs, elevation, start, end, slope_policy, radius,
-                  allow_diagonal=True, timeout=30):
+                  allow_diagonal=True, timeout=30, heatmaps=None):
     deadline = monotonic() + timeout
     values = elevation.values
     rows, cols = values.shape
     valid = np.isfinite(values) & np.isfinite(costs) & (costs > 0) & (costs <= 1e9)
-    if not valid[start[1], start[0]] or not valid[end[1], end[0]]:
+    if heatmaps is None and (not valid[start[1], start[0]] or not valid[end[1], end[0]]):
         return [], None
     directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]
     if allow_diagonal:
@@ -21,6 +21,10 @@ def shortest_path(costs, elevation, start, end, slope_policy, radius,
     dx, dy = elevation.granularity
     # Precompute slope-aware edges in arrays instead of millions of Python dicts.
     edges = []
+    if heatmaps is not None:
+        maximum_penalty = np.full((rows, cols), np.nan)
+        attempted = np.zeros((rows, cols), dtype=np.uint8)
+        rejected = np.zeros((rows, cols), dtype=np.uint8)
     for dc, dr in directions:
         y0, y1 = max(0, -dr), min(rows, rows-dr)
         x0, x1 = max(0, -dc), min(cols, cols-dc)
@@ -37,9 +41,27 @@ def shortest_path(costs, elevation, start, end, slope_policy, radius,
         if dc and dr:
             # Never cut diagonally between blocked cells.
             allowed &= valid[y0:y1, x0+dc:x1+dc] & valid[y0+dr:y1+dr, x0:x1]
+        if heatmaps is not None:
+            # Summarize actual directional slope costs; this is not a new
+            # per-cell slope constraint. Missing neighbours are not slope failures.
+            candidates = valid[y0:y1, x0:x1] & valid[y0+dr:y1+dr, x0+dc:x1+dc]
+            slope_blocked = ~np.isfinite(penalties) | (penalties > 1e9)
+            attempted[y0:y1, x0:x1] += candidates
+            rejected[y0:y1, x0:x1] += candidates & slope_blocked
+            maximum_penalty[y0:y1, x0:x1] = np.fmax(
+                maximum_penalty[y0:y1, x0:x1],
+                np.where(candidates & ~slope_blocked, penalties, np.nan),
+            )
         grid = np.full((rows, cols), np.inf, dtype=np.float32)
         grid[y0:y1, x0:x1] = np.where(allowed, weights, np.inf)
         edges.append((dc, dr, grid))
+    if heatmaps is not None:
+        heatmaps['Slope penalty (maximum finite outgoing)'] = maximum_penalty
+        heatmaps['Slope-blocked directions (fraction)'] = np.divide(
+            rejected, attempted, out=np.full((rows, cols), np.nan), where=attempted > 0,
+        )
+    if not valid[start[1], start[0]] or not valid[end[1], end[0]]:
+        return [], None
     if monotonic() > deadline:
         raise TimeoutError("Routing took too long. Try fewer subdivisions.")
     source, target = start[1]*cols + start[0], end[1]*cols + end[0]

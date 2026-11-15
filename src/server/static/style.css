@@ -356,34 +356,37 @@ html, body {
     left: 50%;
     bottom: 18px;
     transform: translateX(-50%);
-    width: min(450px, calc(100vw - 36px));
+    width: min(320px, calc(100vw - 36px));
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0 10px;
     box-sizing: border-box;
-    padding: 12px 16px;
+    padding: 10px 14px;
     border: 1px solid var(--line);
     border-radius: 6px;
     background: var(--panel);
     backdrop-filter: blur(8px);
-    text-align: center;
+    text-align: left;
 }
-.layer-bar-title { color: var(--dust); font-size: 13px; font-weight: 600; margin-bottom: 10px; }
-.layer-options { display: flex; flex-wrap: wrap; gap: 5px; }
-.layer-options button {
-    flex: 1 1 80px;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    padding: 8px 10px;
-    color: var(--dust-dim);
-    background: transparent;
+.layer-bar label { color: var(--dust-dim); font-size: 12px; }
+#layer-options {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 7px 8px;
+    color: var(--dust);
+    background: #252628;
+    color-scheme: dark;
     font: inherit;
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
 }
-.layer-options button[aria-pressed="true"] { color: var(--dust); border-color: var(--line); background: rgba(234, 217, 200, 0.09); }
-.layer-options button:hover:not(:disabled) { color: var(--dust); }
-.layer-options button:focus-visible { outline: 2px solid var(--pin); outline-offset: 2px; }
-.layer-options button:disabled { opacity: 0.35; cursor: not-allowed; }
-.layer-options[aria-busy="true"] { opacity: 0.7; }
-#layer-status { font-size: 11px; color: var(--dust-dim); margin: 7px 0 0; }
+#layer-options:hover { border-color: var(--dust-dim); }
+#layer-options:focus-visible { outline: 2px solid var(--pin); outline-offset: 2px; }
+#layer-options[aria-busy="true"] { opacity: 0.7; }
+#layer-status { grid-column: 1 / -1; font-size: 11px; color: var(--dust-dim); margin: 8px 0 0; }
 #layer-legend {
     width: 125px;
     flex: 0 1 125px;
@@ -400,9 +403,8 @@ html, body {
 .layer-range { position: absolute; inset: 0 0 0 20px; display: flex; flex-direction: column-reverse; justify-content: space-between; font-size: 10px; font-variant-numeric: tabular-nums; }
 #layer-units { display: block; margin-top: 6px; font-size: 10px; color: var(--dust-dim); overflow-wrap: anywhere; line-height: 1.5; }
 @media (max-width: 1100px) {
-    .legend, .toggle { bottom: 140px; }
+    .legend, .toggle { bottom: 110px; }
 }
 @media (max-width: 640px) {
     .layer-bar { bottom: 12px; padding: 10px; }
-    .layer-options button { padding: 8px 5px; }
 }

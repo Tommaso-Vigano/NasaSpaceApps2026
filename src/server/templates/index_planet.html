@@ -13,7 +13,7 @@
     <canvas id="globe"></canvas>
     <section id="region-panel" class="region-panel" aria-label="Region of interest">
         <strong>Region of interest</strong>
-        <p id="region-status" role="status">Right-drag on Mars to select a region.</p>
+        <p id="region-status" role="status" hidden></p>
         <dl id="region-bounds" hidden>
             <dt>Top left (latitude, longitude)</dt><dd id="region-top-left"></dd>
             <dt>Bottom right (latitude, longitude)</dt><dd id="region-bottom-right"></dd>
@@ -82,11 +82,11 @@
     </button>
 
     <nav class="layer-bar" aria-label="Planet visualization">
-        <div class="layer-bar-title">Visualize Mars</div>
-        <div id="layer-options" class="layer-options" role="group" aria-label="Surface mode">
-            <button type="button" data-layer="surface" aria-pressed="true">Surface</button>
-        </div>
-        <p id="layer-status" role="status">Surface imagery</p>
+        <label for="layer-options">Visualization mode</label>
+        <select id="layer-options" aria-describedby="layer-status">
+            <option value="surface">Surface</option>
+        </select>
+        <p id="layer-status" role="status" hidden></p>
     </nav>
 
     <div id="loading" class="loading">Loading Mars…</div>
