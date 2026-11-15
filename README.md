@@ -1,53 +1,65 @@
-# Mars explorer
-**Route planning and exploration of the Martian surface for rovers and astronauts.**
+<p align="center">
+  <img src="readme_data/title.svg" alt="MARS Explorer" width="500">
 
-MARS Explorer is an interactive tool that lets you browse Mars in 3D, select an area
-of interest, and compute the safest or cheapest path across it. The path depends on
-who is travelling: a rover or a human.
+<p align="center">
+  <b>Route planning on the Martian surface for rovers and astronauts.</b>
+</p>
 
-*Developed for NASA Space Apps Challenge 2026.*
+<p align="center">
+  <img src="readme_data/mars_globe_ui.gif" alt="Rotating 3D globe of Mars in the MARS Explorer interface" width="800">
+</p>
+
+MARS Explorer is an interactive tool to browse Mars in 3D, select an area of
+interest, and compute the lowest-cost path across it. The cost depends on who
+is travelling: a rover or a human.
+
+*Developed for the NASA Space Apps Challenge 2026.*
 
 ---
 
 ## Features
 
-- **3D globe of Mars** with pins on points of interest (e.g. volcanoes, mountains, previous landing sites).
-- **Region selection**: draw a rectangular area on the globe to open a detailed view of it.
-- **Profile-based pathfinding**: shortest/cheapest route between two points, tailored to rover or human.
-- **Slope-aware routing**: climbing from A to B costs differently than descending from B to A.
+- **3D globe of Mars** with pins on points of interest (volcanoes, mountains, previous landing sites).
+- **Region selection:** draw a rectangle on the globe to open a detailed view.
+- **Profile-based routing:** separate cost models for rovers and humans.
+- **Direction-aware costs:** climbing from A to B is not the same as descending from B to A.
+- **Perseverance imagery:** real rover photos of the selected area, when available.
+
+---
+
+## User interface
+
+### 3D Mars view
+Rotate and zoom the planet. Pins mark notable locations, such as the Curiosity
+rover's position.
+
+<p align="center">
+  <img src="readme_data/Curiosity_pin.png" alt="Pin marking the Curiosity rover on the Mars globe" width="500"><br>
+  <em>Pin marking the Curiosity rover.</em>
+</p>
+
+**Right-click and drag** to select an area and open a high-detail image of it.
+
+### Route planner
+1. In the detailed view, zoom in on the area you need.
+2. **Right-click twice**: first the **source**, then the **destination**.
+3. The lowest-cost path for the chosen profile is drawn on the map.
+
+<p align="center">
+  <img src="readme_data/pathfinding_mars.png" alt="Computed path between two points on the Martian terrain" width="600"><br>
+  <em>Lowest-cost path computed between a source and a destination.</em>
+</p>
 
 ---
 
 ## How it works
 
 ### Cost map
-Each terrain cell gets a cost based on the **explorer profile** (rover or human), since
-the two tolerate terrain differently. Costs are stored as a grid (matrix) of floats:
-**the higher the value, the more the cell is discouraged**.
+Each terrain cell gets a cost from the **explorer profile** (rover or human).
+Costs are stored as a matrix of floats: **the higher the value, the more the
+cell is discouraged**.
 
-> Factors used: *[e.g. slope, roughness, elevation, obstacles, ...]*
-
-### Pathfinding
-1. The cost matrix is converted into a **directed graph**, where each cell is a node
-   connected to its neighbours.
-2. Edge weights combine the cell costs with **direction-dependent terms**
-   (for example, the slope from A to B differs from B to A).
-3. The route is computed with **A\*** from [NetworkX](https://networkx.org/), which is
-   efficient and simple to implement.
-
----
-
-## User Interface
-
-### 3D Mars view
-- Rotate and zoom the planet; pins mark notable locations.
-- **Right-click and drag** to select an area and open a high-detail image of it.
-
-### Route planner
-1. In the detailed view, zoom to the area you need.
-2.  Select a **source** and a **destination** on the map.
-3. The optimal path for the chosen profile is computed and drawn on the map.
-
+> Factors used: *[e.g. slope, roughness, elevation, albedo, thermal inertia]*
 
 ## NASA data
 We used [Mars Trek](https://trek.nasa.gov/mars/#v=0.1&x=0&y=0&z=1&p=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A104905&d=&locale=&b=mars&e=-269.999994963537%2C-128.49609135308955%2C269.999994963537%2C128.49609135308955&sfz=&w=)
