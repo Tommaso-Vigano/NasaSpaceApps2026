@@ -420,9 +420,7 @@ class PenaltyManager:
             if not grid_graph.graph.has_edge(source, target):
                 continue
 
-            if not np.isfinite(cost) or cost > self.MAX_GRAPH_COST:
-                grid_graph.graph.remove_edge(source, target)
-            else:
-                grid_graph.apply_slope_costs([
-                    (source, target, cost)
-                ])
+
+            grid_graph.apply_slope_costs([
+                (source, target, cost)
+            ])

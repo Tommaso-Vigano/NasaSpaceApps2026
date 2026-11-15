@@ -19,6 +19,7 @@
             <dt>Bottom right (latitude, longitude)</dt><dd id="region-bottom-right"></dd>
         </dl>
         <button id="region-clear" type="button" hidden>Clear selection</button>
+        <button id="region-confirm" type="button" hidden disabled>Explore region</button>
     </section>
 
     <!-- Selected landmark -->
@@ -39,8 +40,16 @@
         <div id="legend-body" class="panel-body"></div>
     </aside>
 
-    <!-- Display controls (top right). Each <section> is one family of controls;
-         a "Layers" section can be added next to "Markers" later. -->
+    <!-- The active colour scale sits beside the display controls. -->
+    <div class="display-panels">
+        <aside id="layer-legend" aria-label="Layer colour scale" hidden>
+            <strong id="layer-legend-title"></strong>
+            <div id="layer-scale" class="layer-scale">
+            <div id="layer-gradient" class="layer-gradient"></div>
+            <div class="layer-range"><span id="layer-min"></span><span id="layer-max"></span></div>
+            </div>
+            <small id="layer-units"></small>
+        </aside>
     <aside id="controls" class="panel controls" data-open="true">
         <button class="panel-head" type="button" aria-expanded="true" aria-controls="controls-body">
             <span>Display</span>
@@ -60,6 +69,7 @@
             <section id="marker-controls" class="control-section" aria-label="Markers"></section>
         </div>
     </aside>
+    </div>
 
     <button id="rotate-toggle" class="toggle" type="button" aria-pressed="false">
         <svg class="icon icon-pause" viewBox="0 0 16 16" aria-hidden="true">
@@ -71,6 +81,14 @@
         <span class="toggle-text">Pause rotation</span>
     </button>
 
+    <nav class="layer-bar" aria-label="Planet visualization">
+        <div class="layer-bar-title">Visualize Mars</div>
+        <div id="layer-options" class="layer-options" role="group" aria-label="Surface mode">
+            <button type="button" data-layer="surface" aria-pressed="true">Surface</button>
+        </div>
+        <p id="layer-status" role="status">Surface imagery</p>
+    </nav>
+
     <div id="loading" class="loading">Loading Mars…</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -78,6 +96,7 @@
     <script src="{{ url_for('static', filename='main.js') }}"
             data-landmarks-url="{{ url_for('globe_landmarks') }}"
             data-coverage-url="{{ url_for('elevation_coverage') }}"
+            data-layers-url="{{ url_for('globe_layer_catalog') }}"
             data-static-url="{{ url_for('static', filename='') }}"></script>
 </body>
 

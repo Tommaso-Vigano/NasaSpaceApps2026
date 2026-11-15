@@ -10,6 +10,7 @@
     const CONFIG = {
         landmarksUrl: script.dataset.landmarksUrl,
         coverageUrl: script.dataset.coverageUrl,
+        layersUrl: script.dataset.layersUrl,
         colorMapUrl: staticUrl + 'texture/Mars_surface_map.png',
         elevationMapUrl: staticUrl + 'texture/mars_elevation.jpg',
         starsUrl: staticUrl + 'texture/galaxy.svg',
@@ -228,9 +229,9 @@
     // Color maps are usually centered differently from the elevation map, and a very large
     // one (tens of MB) can exceed what a GPU holds comfortably. Both are handled by drawing the
     // image into a canvas, shifted sideways (wrapping around) and/or scaled down.
-    async function loadColorTexture(url, renderer) {
+    async function loadColorTexture(url, renderer, centerLongitude = CONFIG.colorMapCenterLon) {
         const img = await loadImage(url);
-        const shift = (CONFIG.elevationMapCenterLon - CONFIG.colorMapCenterLon) / 360;
+        const shift = (CONFIG.elevationMapCenterLon - centerLongitude) / 360;
         const maxWidth = Math.min(CONFIG.maxColorTextureWidth, renderer.capabilities.maxTextureSize);
         const scale = Math.min(1, maxWidth / img.naturalWidth);
         let texture;
@@ -394,6 +395,100 @@
         planet.add(planetMesh);
         scene.add(planet);
  
+        // Replace only the colour map. Relief, coverage, pins and selection
+        // remain in the same geographic frame for every visualization mode.
+        async function setupVisualizationLayers() {
+            const options = $('layer-options');
+            const status = $('layer-status');
+            const legend = $('layer-legend');
+            const textures = new Map();
+            let requestVersion = 0;
+            function applyLayer(id, texture, metadata) {
+                material.map = texture;
+                material.needsUpdate = true;
+                options.querySelectorAll('button').forEach((button) => {
+                    button.setAttribute('aria-pressed', String(button.dataset.layer === id));
+                });
+                legend.hidden = !metadata;
+                const isImage = metadata && metadata.legend_type === 'image';
+                $('layer-scale').hidden = !metadata || isImage;
+                $('layer-legend-title').textContent = metadata ? metadata.label : '';
+                $('layer-units').textContent = isImage
+                    ? 'Pre-colored imagery. Numeric color scale unavailable in this file.'
+                    : metadata ? (metadata.units || 'Dimensionless') : '';
+                status.textContent = metadata ? metadata.label
+                    + (metadata.legend_type === 'image' ? ' | source image colours' : '') : 'Surface imagery';
+                if (metadata && metadata.legend_type !== 'image') {
+                    const number = (value) => new Intl.NumberFormat(undefined,
+                        {maximumSignificantDigits: 4}).format(value);
+                    $('layer-gradient').style.background =
+                        'linear-gradient(to top, ' + metadata.colors.join(', ') + ')';
+                    $('layer-min').textContent = number(metadata.minimum);
+                    $('layer-max').textContent = number(metadata.maximum);
+                    legend.title = metadata.stretch + '; dark grey: missing';
+                }
+                if (isImage || !metadata) legend.removeAttribute('title');
+            }
+            $('layer-options').querySelector('[data-layer="surface"]').addEventListener('click', () => {
+                requestVersion++;
+                options.removeAttribute('aria-busy');
+                applyLayer('surface', colorMap, null);
+            });
+            try {
+                const response = await fetch(CONFIG.layersUrl);
+                if (!response.ok) throw new Error('Could not load visualization modes');
+                const catalog = await response.json();
+                for (const layer of catalog.layers) {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.dataset.layer = layer.id;
+                    button.textContent = layer.label;
+                    button.setAttribute('aria-pressed', 'false');
+                    button.disabled = !layer.available;
+                    if (!layer.available) button.title = 'This dataset is not currently available';
+                    options.append(button);
+                    button.addEventListener('click', async () => {
+                        const version = ++requestVersion;
+                        status.textContent = 'Loading ' + layer.label.toLowerCase() + '...';
+                        options.setAttribute('aria-busy', 'true');
+                        try {
+                            if (!textures.has(layer.id)) {
+                                const pending = (async () => {
+                                    const response = await fetch(layer.metadata_url);
+                                    if (!response.ok) {
+                                        const error = await response.json();
+                                        throw new Error(error.error || 'Layer could not be loaded');
+                                    }
+                                    const metadata = await response.json();
+                                    const texture = await loadColorTexture(metadata.texture_url, renderer,
+                                                                           metadata.center_longitude);
+                                    return {texture, metadata};
+                                })();
+                                textures.set(layer.id, pending);
+                                pending.catch(() => textures.delete(layer.id));
+                            }
+                            const {texture, metadata} = await textures.get(layer.id);
+                            // A slower, earlier request must never override a newer selection.
+                            if (version === requestVersion) applyLayer(layer.id, texture, metadata);
+                        } catch (error) {
+                            console.warn(error);
+                            if (version === requestVersion)
+                                status.textContent = 'Could not load ' + layer.label.toLowerCase()
+                                    + '. Current view retained; click to retry.';
+                        } finally {
+                            if (version === requestVersion) options.removeAttribute('aria-busy');
+                        }
+                    });
+                }
+                if (!catalog.layers.some((layer) => layer.available))
+                    status.textContent = 'Surface imagery | additional datasets unavailable';
+            } catch (error) {
+                console.warn(error);
+                status.textContent = 'Surface imagery | additional modes unavailable';
+            }
+        }
+        setupVisualizationLayers();
+
         // Four inward-pointing surface arrows make small coverage patches
         // discoverable from orbit. Their size is angular, independent of the
         // patch size; the tip stops just short of the actual footprint.
@@ -865,10 +960,40 @@
                 new THREE.LineBasicMaterial({color: 0xffdfad, depthWrite: false})));
         }
 
+        function selectedSectors(bounds) {
+            if (!bounds || bounds.crosses_antimeridian || !coverageData) return [];
+            const ids = new Map();
+            for (const patch of coverageData.rectangles) {
+                if (patch.sector_id && patch.top_left[0] < bounds.bottom_right.longitude
+                    && patch.bottom_right[0] > bounds.top_left.longitude
+                    && patch.top_left[1] > bounds.bottom_right.latitude
+                    && patch.bottom_right[1] < bounds.top_left.latitude) ids.set(patch.sector_id, patch);
+            }
+            return [...ids.values()];
+        }
+        $('region-confirm').addEventListener('click', () => {
+            const matches = selectedSectors(region);
+            if (matches.length !== 1) return;
+            const url = new URL(matches[0].viewer_url, window.location.origin);
+            url.search = new URLSearchParams({west: region.top_left.longitude,
+                north: region.top_left.latitude, east: region.bottom_right.longitude,
+                south: region.bottom_right.latitude});
+            window.location.assign(url);
+        });
         function showRegion(bounds, message) {
             $('region-status').textContent = message;
             $('region-bounds').hidden = !bounds;
             $('region-clear').hidden = !bounds;
+            const matches = selectedSectors(bounds);
+            const confirm = $('region-confirm');
+            confirm.hidden = !bounds;
+            confirm.disabled = !!roiDrag || matches.length !== 1;
+            if (bounds && !roiDrag) {
+                $('region-status').textContent += bounds.crosses_antimeridian
+                    ? ' Select on one side of the antimeridian.'
+                    : matches.length > 1 ? ' Multiple sectors selected; narrow the selection.'
+                    : matches.length === 0 ? ' No covered sector selected.' : '';
+            }
             if (bounds) {
                 const format = (p) => p.latitude.toFixed(4) + '\u00b0, ' + p.longitude.toFixed(4) + '\u00b0';
                 $('region-top-left').textContent = format(bounds.top_left);

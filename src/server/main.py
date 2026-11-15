@@ -24,6 +24,8 @@ def main() -> None:
     parser.add_argument("--datasets-config", default=os.getenv("DATASETS_CONFIG"),
                         help="Dataset configuration JSON (defaults to DATASETS_CONFIG in .env)")
     parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--globe-layers", default=os.getenv("GLOBE_LAYERS_PATH", "data/globe_layers"),
+                        help="Directory containing global albedo and thermal-inertia TIFFs")
     args = parser.parse_args()
 
     if not args.landmarks:
@@ -39,7 +41,10 @@ def main() -> None:
 
 
     # Begin hosting the webserver
-    WebServer(landmarks, world_model).run(host=args.host, port=args.port)
+    globe_layers_path = Path(args.globe_layers)
+    if not globe_layers_path.is_absolute():
+        globe_layers_path = ROOT / globe_layers_path
+    WebServer(landmarks, world_model, globe_layers_path).run(host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

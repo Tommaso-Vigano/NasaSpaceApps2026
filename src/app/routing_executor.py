@@ -134,6 +134,7 @@ class RoutingExecutor:
         *,
         elevation_map: Map,
         allow_diagonal: bool = True,
+        compact: bool = False,
     ) -> RoutingResult:
         """
         Compute a route using an already aligned WorldSlice.
@@ -199,6 +200,20 @@ class RoutingExecutor:
         )
 
         costs[~inside] = 0.0
+
+        if compact:
+            from src.routing.compact import shortest_path
+            source = self._coordinate_to_node(start, elevation_map)
+            target = self._coordinate_to_node(end, elevation_map)
+            path, total_cost = shortest_path(
+                costs, elevation_map, source, target,
+                self.penalty_manager.select_slope_cost_function(self.profile),
+                self.penalty_manager.MARS_RADIUS, allow_diagonal,
+            )
+            return RoutingResult(path, [
+                (elevation_map.top_left[0] + column*dx,
+                 elevation_map.top_left[1] - row*dy) for column, row in path
+            ], total_cost)
 
         # Keep the original GridGraph unchanged.
         # Its coordinate conversion runs in index space.

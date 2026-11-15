@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ region.title }} | MarsWalk</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='region.css') }}">
+</head>
+<body>
+    <canvas id="region-canvas" aria-label="Regional map. Drag to pan; scroll to zoom."></canvas>
+    <header><a href="{{ url_for('planet') }}">Back to Mars</a><h1>{{ region.title }}</h1>
+        <p>Drag to pan. Scroll to zoom.</p></header>
+    <aside class="routing-panel" aria-label="Route planning">
+        <div class="mouse-coordinate"><span>Mouse latitude, longitude</span>
+            <output id="mouse-coordinate">Move over the map</output></div>
+        <h2>Plan a route</h2>
+        <p>Right-click to set start, then destination.</p>
+        <ol id="route-endpoints"><li>Start: not selected</li><li>Destination: not selected</li></ol>
+        <label for="subdivisions">Grid subdivisions <output id="subdivision-value">100</output></label>
+        <input id="subdivisions" type="range" min="10" max="1000" step="1" value="100">
+        <small id="grid-estimate"></small>
+        <div class="route-actions">
+            <button id="calculate-route" disabled>Find route</button>
+            <button id="clear-endpoints" disabled>Clear points</button>
+        </div>
+        <p id="route-status" role="status">Select two points to begin.</p>
+        <small>Elevation and human slope profile. Endpoints snap to grid centres; curve rounding is visual only.</small>
+    </aside>
+    <nav aria-label="Map controls">
+        <button id="zoom-in" aria-label="Zoom in">+</button>
+        <button id="zoom-out" aria-label="Zoom out">&minus;</button>
+        <button id="fit-region">Fit selection</button>
+    </nav>
+    <p id="map-status" role="status">Loading region...</p>
+    <script id="region-config" type="application/json">{{ region | tojson }}</script>
+    <script src="{{ url_for('static', filename='region.js') }}"></script>
+</body>
+</html>

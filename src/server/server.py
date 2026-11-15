@@ -1,22 +1,34 @@
 """Minimal landmark JSON API. One registry is shared within a server instance."""
 
-from threading import RLock
+from threading import RLock, BoundedSemaphore
+from pathlib import Path
+from io import BytesIO
+from hashlib import sha256
 
-from flask import Flask, abort, jsonify, render_template, request, url_for
+from flask import Flask, abort, jsonify, render_template, request, send_file, url_for
 from werkzeug.exceptions import HTTPException
 
 from src.landmarks.registry import LandmarkRegistry
 from src.data.data_model import WorldModel
 from src.data.types import Datatype
+from src.server.globe_layers import GlobeLayers
+from src.server.regions import Regions
 
 
 class WebServer:
 
-    def __init__(self, landmarks: LandmarkRegistry, world_model: WorldModel) -> None:
+    def __init__(self, landmarks: LandmarkRegistry, world_model: WorldModel,
+                 globe_layers_path: str | Path | None = None) -> None:
 
         self.landmarks = landmarks
         self.world_model = world_model
+        self.regions = Regions(world_model)
+        self.globe_layers = GlobeLayers(
+            globe_layers_path if globe_layers_path is not None
+            else Path(__file__).resolve().parents[2] / "data/globe_layers"
+        )
         self._lock = RLock()
+        self._routing_slot = BoundedSemaphore(1)
         self.app = Flask(__name__)
         self.app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
         self._register_routes()
@@ -43,6 +55,91 @@ class WebServer:
         def planet():
             return render_template("index_planet.html")
 
+        @self.app.get("/region/<sector_id>")
+        def region_page(sector_id):
+            if sector_id not in self.regions.sectors:
+                abort(404, description="Unknown sector.")
+            try:
+                names = ("west", "south", "east", "north")
+                bounds = {name: float(request.args[name]) for name in names} if request.args else None
+                clipped = self.regions.select(sector_id, bounds)
+                info = self.regions.info(sector_id, clipped)
+            except KeyError:
+                abort(400, description="Supply west, south, east and north together.")
+            except (ValueError, OSError) as error:
+                abort(400, description=str(error))
+            info["frame_url"] = url_for("region_frame", sector_id=sector_id)
+            info["route_url"] = url_for("region_route", sector_id=sector_id)
+            return render_template("region.html", region=info)
+
+        @self.app.post("/api/regions/<sector_id>/route")
+        def region_route(sector_id):
+            from src.server.routing_service import route_region, NoRouteError
+            from src.app.penalty.penalty_manager import PenaltyError
+            if sector_id not in self.regions.sectors:
+                abort(404, description="Unknown sector.")
+            payload = request.get_json()
+            if not self._routing_slot.acquire(blocking=False):
+                abort(429, description="Another route is being computed. Please try again shortly.")
+            try:
+                return jsonify(route_region(self.regions, sector_id, payload))
+            except (NoRouteError, PenaltyError) as error:
+                abort(422, description=str(error))
+            except TimeoutError as error:
+                abort(504, description=str(error))
+            except (ValueError, OSError) as error:
+                abort(400, description=str(error))
+            finally:
+                self._routing_slot.release()
+
+        @self.app.get("/api/regions/<sector_id>/frame.png")
+        def region_frame(sector_id):
+            if sector_id not in self.regions.sectors:
+                abort(404, description="Unknown sector.")
+            try:
+                coordinates = [float(request.args[name]) for name in ("x", "y", "width", "height")]
+                pixels = int(request.args.get("pixels", 1024))
+                png, viewport = self.regions.frame(sector_id, *coordinates, pixels=pixels)
+            except KeyError:
+                abort(400, description="Supply x, y, width and height for the viewport.")
+            except (OSError, ValueError) as error:
+                abort(400, description=str(error))
+            response = send_file(BytesIO(png), mimetype="image/png", max_age=60,
+                                 conditional=True, etag=sha256(png).hexdigest())
+            response.headers["X-Viewport"] = self.app.json.dumps(viewport)
+            return response
+
+        @self.app.get("/api/globe/layers")
+        def globe_layer_catalog():
+            layers = self.globe_layers.catalog()
+            for layer in layers:
+                layer["metadata_url"] = url_for("globe_layer_metadata", layer_id=layer["id"])
+            return jsonify({"layers": layers})
+
+        def rendered_layer(layer_id):
+            try:
+                return self.globe_layers.render(layer_id)
+            except KeyError:
+                abort(404, description="Unknown globe layer.")
+            except FileNotFoundError:
+                abort(404, description="This globe layer's source TIFF is not installed.")
+            except (OSError, ValueError) as error:
+                self.app.logger.warning("Cannot render globe layer %s: %s", layer_id, error)
+                abort(422, description="Could not render this georeferenced scalar or RGB(A) TIFF.")
+
+        @self.app.get("/api/globe/layers/<layer_id>")
+        def globe_layer_metadata(layer_id):
+            _, metadata = rendered_layer(layer_id)
+            return jsonify({**metadata, "texture_url": url_for(
+                "globe_layer_image", layer_id=layer_id, v=metadata["version"],
+            )})
+
+        @self.app.get("/api/globe/layers/<layer_id>/texture.png")
+        def globe_layer_image(layer_id):
+            png, _ = rendered_layer(layer_id)
+            return send_file(BytesIO(png), mimetype="image/png", max_age=3600,
+                             conditional=True, etag=sha256(png).hexdigest())
+
         @self.app.get("/api/globe/landmarks")
         def globe_landmarks():
             with self._lock:
@@ -54,7 +151,10 @@ class WebServer:
             # samples or routing computations are needed for this layer.
             return jsonify({
                 "rectangles": [
-                    {"top_left": list(map_.top_left),
+                    {**({"sector_id": self.regions.id_for_map(map_),
+                         "viewer_url": url_for("region_page", sector_id=self.regions.id_for_map(map_))}
+                        if self.regions.id_for_map(map_) else {}),
+                     "top_left": list(map_.top_left),
                      "bottom_right": list(map_.bottom_right)}
                     for map_ in self.world_model.get_maps_by_datatype(Datatype.ELEVATION)
                 ],

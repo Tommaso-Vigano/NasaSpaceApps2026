@@ -8,7 +8,6 @@ from .implementations.soft_threshold_penalty import SoftThresholdPenalty
 
 def configure_penalties(
     manager: PenaltyManager,
-    *,
     temperature_limit: float,
     albedo_weight: float
 ) -> None:
