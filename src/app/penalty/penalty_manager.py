@@ -197,7 +197,7 @@ class PenaltyManager:
         """Increase slope cost progressively, then block at the limit."""
         return ProgressiveCutoff(
             threshold=self._get_slope_limit(profile),
-            weight=12.0,
+            weight=16.0,
         )
 
     def _construct_cost_pipeline(
@@ -230,7 +230,7 @@ class PenaltyManager:
                 replace(
                     source_map,
                     values=costs,
-                    title=f"{source_map.title} — penalty",
+                    title=f"{source_map.title}, penalty",
                     metadata=(
                         f"Penalty computed with {type(penalty).__name__}. "
                         f"Source metadata: {source_map.metadata}"

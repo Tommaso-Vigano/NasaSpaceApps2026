@@ -16,16 +16,43 @@
     const mouseCoordinate = document.getElementById('mouse-coordinate');
     const constraintOptions = document.getElementById('constraint-options');
     const constraintStatus = document.getElementById('constraints-status');
+    const profileSelect = document.getElementById('routing-profile');
+    const profileButton = document.getElementById('profile-settings-button');
+    const profilePanel = document.getElementById('profile-panel');
     // Older cached templates nest this inside the blurred routing panel,
     // which makes fixed positioning relative to that panel, not the viewport.
     const constraintsPanel = constraintOptions.closest('.constraints-panel');
-    if (constraintsPanel.parentElement !== document.body) document.body.append(constraintsPanel);
+    if (constraintsPanel.closest('.routing-panel')) document.body.append(constraintsPanel);
     let heatmaps = null;
+
+    if (profileButton && profilePanel && profileSelect) {
+        function setProfilePanel(open) {
+            profilePanel.hidden = !open;
+            profileButton.setAttribute('aria-expanded', String(open));
+            if (open) profileSelect.focus();
+        }
+        profileButton.addEventListener('click', () => setProfilePanel(profilePanel.hidden));
+        document.addEventListener('pointerdown', (event) => {
+            if (!profileButton.parentElement.contains(event.target)) setProfilePanel(false);
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !profilePanel.hidden) {
+                setProfilePanel(false); profileButton.focus();
+            }
+        });
+        profileSelect.addEventListener('change', () => {
+            route = []; clearHeatmaps(); routeStatus.textContent = '';
+            const label = 'Routing profile: ' + profileSelect.selectedOptions[0].textContent;
+            profileButton.title = label;
+            profileButton.setAttribute('aria-label', label);
+            draw();
+        });
+    }
 
     function clearHeatmaps() {
         heatmaps = null;
         constraintOptions.replaceChildren();
-        constraintStatus.textContent = 'Calculate a route to see its constraints.';
+        constraintStatus.textContent = 'Available after routing.';
     }
     async function loadHeatmaps(data) {
         if (!data) return;
@@ -37,21 +64,27 @@
         }));
         heatmaps = {...data, layers};
         constraintOptions.replaceChildren();
-        constraintStatus.textContent = 'Toggle overlays. Sharp cells show the routing grid; missing data is transparent.';
+        constraintStatus.textContent = 'Magenta: blocked · gaps: no data';
         layers.forEach((layer) => {
             const row = document.createElement('div'); row.className = 'constraint-option';
             const label = document.createElement('label');
             const checkbox = document.createElement('input'); checkbox.type = 'checkbox';
             checkbox.checked = layer.visible;
             checkbox.addEventListener('change', () => { layer.visible = checkbox.checked; draw(); });
-            const title = document.createElement('span'); title.textContent = layer.title;
+            const names = {
+                'Slope penalty (maximum finite outgoing)': 'Slope cost',
+                'Slope-blocked directions (fraction)': 'Blocked directions',
+                'Combined cell cost': 'Cell cost',
+            };
+            const title = document.createElement('span');
+            title.textContent = names[layer.title] || layer.title.replace(/\s*[—–-]\s*penalty$/i, '');
+            label.title = layer.title;
             label.append(checkbox, title);
             const gradient = document.createElement('div'); gradient.className = 'constraint-gradient';
             gradient.style.background = 'linear-gradient(to right, ' + layer.colors.join(', ') + ')';
             const range = document.createElement('small');
             const number = (value) => new Intl.NumberFormat(undefined, {maximumSignificantDigits: 3}).format(value);
-            range.textContent = (layer.minimum === null ? 'No finite values' : number(layer.minimum) + ' – ' + number(layer.maximum))
-                + ' | magenta: blocked';
+            range.textContent = layer.minimum === null ? 'No values' : number(layer.minimum) + ' – ' + number(layer.maximum);
             row.append(label, gradient, range); constraintOptions.append(row);
         });
     }
@@ -122,6 +155,7 @@
         routeButton.disabled = routing || endpoints.length !== 2;
         clearButton.disabled = routing || endpoints.length === 0;
         subdivisionSlider.disabled = routing;
+        if (profileSelect) profileSelect.disabled = routing;
         const list = document.getElementById('route-endpoints');
         list.replaceChildren(...['Start', 'End'].map((name, index) => {
             const item = document.createElement('li');
@@ -190,7 +224,7 @@
         const point = pixelAt(event);
         mouseCoordinate.textContent = point ? formatPoint(point) : 'Outside sector';
     });
-    canvas.addEventListener('pointerleave', () => { mouseCoordinate.textContent = '—'; });
+    canvas.addEventListener('pointerleave', () => { mouseCoordinate.textContent = '-'; });
     clearButton.addEventListener('click', () => {
         endpoints.length = 0; route = []; clearHeatmaps();
         routeStatus.textContent = '';
@@ -205,7 +239,8 @@
         try {
             const response = await fetch(config.route_url, {
                 method: 'POST', headers: {'Content-Type': 'application/json'}, signal: routeController.signal,
-                body: JSON.stringify({start: endpoints[0], end: endpoints[1], subdivisions: Number(subdivisionSlider.value)}),
+                body: JSON.stringify({start: endpoints[0], end: endpoints[1], subdivisions: Number(subdivisionSlider.value),
+                                      profile: {type: profileSelect?.value || 'human'}}),
             });
             const result = await response.json();
             try { await loadHeatmaps(result.heatmaps); }

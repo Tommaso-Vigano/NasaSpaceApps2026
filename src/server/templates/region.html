@@ -16,7 +16,7 @@
     </header>
     <aside class="routing-panel" aria-label="Route planning">
         <div class="mouse-coordinate"><span>Cursor (lat, lon)</span>
-            <output id="mouse-coordinate">—</output></div>
+            <output id="mouse-coordinate">-</output></div>
         <ul id="route-endpoints" aria-label="Endpoints in latitude, longitude" title="Right-click the map to set Start, then End."><li>Start: —</li><li>End: —</li></ul>
         <label for="subdivisions">Subdivisions <output id="subdivision-value">100</output></label>
         <input id="subdivisions" type="range" min="10" max="1000" step="1" value="100">
@@ -27,11 +27,29 @@
         </div>
         <p id="route-status" role="status"></p>
     </aside>
+    <div class="constraints-dock">
+        <div class="profile-settings">
+            <button id="profile-settings-button" type="button" aria-label="Routing profile: Human"
+                    title="Routing profile: Human" aria-expanded="false" aria-controls="profile-panel">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m9.5 3-.5 2-2 1.2-2-.6-2.5 4.3L4 11.3v2l-1.5 1.4L5 19l2-.6 2 1.2.5 2.4h5l.5-2.4 2-1.2 2 .6 2.5-4.3-1.5-1.4v-2l1.5-1.4L19 5.6l-2 .6L15 5l-.5-2z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                </svg>
+            </button>
+            <section id="profile-panel" aria-label="Routing settings" hidden>
+                <label for="routing-profile">Routing profile</label>
+                <select id="routing-profile">
+                    <option value="human">Human</option>
+                    <option value="rover">Rover</option>
+                </select>
+            </section>
+        </div>
     <aside class="constraints-panel" aria-label="Constraint views">
         <h2>Constraints</h2>
-        <p id="constraints-status">Calculate a route to see its constraints.</p>
+        <p id="constraints-status">Available after routing.</p>
         <div id="constraint-options"></div>
     </aside>
+    </div>
     {% if region.photos_url %}
     <div id="photo-markers" aria-label="Perseverance photo stops"></div>
     <aside class="photos-control" aria-label="Mission photos">

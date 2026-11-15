@@ -10,7 +10,6 @@ from rasterio.windows import Window
 from src.app.routing_executor import RoutingExecutor
 from src.basic import Coordinate
 from src.data.data_model import WorldModel
-from src.routing.profiles import HumanProfile
 from src.server.constraint_heatmaps import encode_heatmaps
 
 
@@ -26,6 +25,11 @@ def route_region(regions, sector_id, payload):
     subdivisions = payload.get("subdivisions")
     if isinstance(subdivisions, bool) or not isinstance(subdivisions, int) or not 10 <= subdivisions <= 1000:
         raise ValueError("Subdivisions must be an integer from 10 to 1000.")
+    profile_spec = payload.get('profile', {'type': 'human'})
+    if (not isinstance(profile_spec, dict) or set(profile_spec) != {'type'}
+            or profile_spec['type'] not in ('human', 'rover')):
+        raise ValueError('Profile must contain a type of human or rover.')
+    profile = RoutingExecutor.load_profile_from_json(profile_spec)
     sector = regions.get(sector_id)
     reference = regions.source_map(sector_id)
     rows, cols = reference.values.shape
@@ -64,14 +68,14 @@ def route_region(regions, sector_id, payload):
         precision = ((cols-1)*dx/min(subdivisions, cols-1),
                      (rows-1)*dy/min(subdivisions, rows-1))
         # Other layers currently have no registered default cost selectors.
-        # Elevation-only routing applies the existing human slope policy.
+        # Elevation-only routing applies the selected profile's slope policy.
         world_slice = WorldModel([reference]).make_slice(
             reference.top_left, reference.bottom_right, precision,
         )
         elevation = next(iter(world_slice))
         executor = RoutingExecutor(Coordinate(lat=reference.top_left[1], lon=reference.top_left[0]),
                                    Coordinate(lat=reference.bottom_right[1], lon=reference.bottom_right[0]),
-                                   HumanProfile())
+                                   profile)
 
         """
         configure_penalties(
@@ -95,5 +99,5 @@ def route_region(regions, sector_id, payload):
         return {"path": np.stack((pixel_x, pixel_y), axis=-1).tolist(),
                 "coordinates": result.coordinates, "total_cost": result.total_cost,
                 "grid_shape": list(elevation.values.shape), "granularity": list(precision),
-                "subdivisions": subdivisions, "profile": "human", "layers": ["elevation"],
+                "subdivisions": subdivisions, "profile": profile_spec['type'], "layers": ["elevation"],
                 "heatmaps": heatmaps}

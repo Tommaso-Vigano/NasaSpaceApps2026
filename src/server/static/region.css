@@ -49,6 +49,16 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .constraint-option input { accent-color: #a4f5d5; }
 .constraint-option small { display: block; margin-top: 5px; }
 .constraint-gradient { height: 5px; margin-top: 8px; border-radius: 2px; }
+.constraints-dock { position: fixed; right: 16px; bottom: 18px; display: flex; align-items: flex-end; gap: 10px; z-index: 2; }
+.constraints-dock .constraints-panel { position: static; }
+.profile-settings { position: relative; flex: none; z-index: 3; }
+#profile-settings-button { display: grid; place-items: center; width: 38px; height: 38px; padding: 8px; background: #1c2026; border-color: #53514e; }
+#profile-settings-button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+#profile-settings-button[aria-expanded="true"] { background: #343738; }
+#profile-panel { position: absolute; bottom: 48px; left: 0; width: 210px; padding: 14px; background: #1c2026; border: 1px solid #53514e; border-radius: 6px; box-shadow: 0 8px 24px #0004; }
+#profile-panel label { display: block; margin-bottom: 10px; font-size: 12px; }
+#routing-profile { width: 100%; padding: 8px; background: #252a31; color: inherit; border: 1px solid #53514e; border-radius: 4px; font: inherit; color-scheme: dark; }
+#routing-profile:focus-visible { outline: 2px solid #a4f5d5; outline-offset: 2px; }
 @media (max-width: 700px) {
     header { max-width: calc(100vw - 160px); font-size: 12px; padding: 8px; }
     header h1 { font-size: 14px; } header p { display: none; }
@@ -57,11 +67,15 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 @media (max-width: 1000px) {
     .routing-panel { bottom: 140px; max-height: calc(100vh - 250px); }
     .constraints-panel { bottom: 140px; max-height: min(45vh, calc(100vh - 250px)); }
+    .constraints-dock { bottom: 140px; }
 }
 @media (max-width: 600px) {
     .routing-panel { width: calc(50vw - 18px); }
     .constraints-panel { right: 10px; width: calc(50vw - 18px); padding: 10px; overflow-wrap: anywhere; }
     .route-actions { flex-wrap: wrap; }
+    .constraints-dock { right: 10px; }
+    .profile-settings { position: absolute; right: 0; bottom: calc(100% + 8px); }
+    #profile-panel { left: auto; right: 0; width: 190px; }
 }
 
 #photo-markers { position: fixed; inset: 0; pointer-events: none; z-index: 1; }

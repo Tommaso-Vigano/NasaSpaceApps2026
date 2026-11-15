@@ -75,7 +75,7 @@ class RoverProfile(Profile):
     """
     hard_constraints ={
         "tilt": 45.0, # in degrees
-        "slope": 30.0, # in degrees
+        "slope": 10.0, # in degrees
         "step": 0.4, # meters
         "dunes": 0.3, # meters
         "soft_ground": 100.0, # TI < 100 J m⁻² K⁻¹ s⁻½
