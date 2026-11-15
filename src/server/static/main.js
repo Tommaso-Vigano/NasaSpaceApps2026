@@ -802,6 +802,10 @@
         controls.minDistance = 0.7;
         controls.maxDistance = 3.5;
         controls.zoomSpeed = 0.7;
+        let focusFlight = null;
+        const landmarkButtons = new Map();
+        controls.addEventListener('start', () => { focusFlight = null; });
+        canvas.addEventListener('pointerdown', () => { focusFlight = null; }, true);
  
         // ---- Auto-rotation toggle ------------------------------------
         let rotating = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -812,6 +816,7 @@
             toggleBtn.querySelector('.toggle-text').textContent = rotating ? 'Pause rotation' : 'Resume rotation';
         }
         toggleBtn.addEventListener('click', () => {
+            focusFlight = null;
             rotating = !rotating;
             renderToggle();
         });
@@ -852,6 +857,7 @@
             if (selected === marker) return;
             if (selected) selected.setSelected(false);
             selected = marker;
+            landmarkButtons.forEach((button, item) => button.setAttribute('aria-current', item === marker ? 'location' : 'false'));
             if (marker) {
                 marker.setSelected(true);
                 const lm = marker.landmark;
@@ -878,6 +884,37 @@
             const y = (-labelWorld.y * 0.5 + 0.5) * window.innerHeight;
             labelEl.style.transform =
                 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) translate(-50%, calc(-100% - 16px))';
+        }
+
+        function focusLandmark(marker) {
+            if (roiDrag) finishRegion(null, true);
+            rotating = false; rotationSpeed = 0; renderToggle();
+            setTypesVisible([marker.type.id], true);
+            // Flush old drag momentum before starting the camera transition.
+            controls.enableDamping = false; controls.update(); controls.enableDamping = true;
+            planet.updateMatrixWorld(true);
+            const from = camera.position.clone().normalize();
+            const to = marker.group.getWorldPosition(new THREE.Vector3()).normalize();
+            focusFlight = {
+                from, rotation: new THREE.Quaternion().setFromUnitVectors(from, to),
+                current: new THREE.Quaternion(), direction: new THREE.Vector3(),
+                distance: camera.position.length(), endDistance: Math.max(controls.minDistance+.12, Math.min(camera.position.length(), 1.25)),
+                elapsed: 0, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1,
+            };
+            select(marker);
+        }
+
+        function updateLandmarkFocus(dt) {
+            if (!focusFlight) return;
+            const flight = focusFlight;
+            flight.elapsed += dt;
+            const progress = flight.duration ? Math.min(1, flight.elapsed/flight.duration) : 1;
+            const eased = progress*progress*(3-2*progress);
+            flight.current.identity().slerp(flight.rotation, eased);
+            flight.direction.copy(flight.from).applyQuaternion(flight.current);
+            camera.position.copy(flight.direction).multiplyScalar(flight.distance+(flight.endDistance-flight.distance)*eased);
+            controls.target.set(0, 0, 0);
+            if (progress === 1) focusFlight = null;
         }
  
         // ---- Geographic region selection ---------------------------------
@@ -1105,8 +1142,7 @@
         $('label-close').addEventListener('click', () => select(null));
         window.addEventListener('keydown', (e) => { if (e.key === 'Escape') select(null); });
  
-        // ---- Legend and display controls ------------------------------
-        const legendRows = {};
+        // ---- Landmark navigation and display controls -----------------
         const typeInputs = {};
         const groupInputs = {};
         let masterInput = null;
@@ -1125,7 +1161,6 @@
                 const on = typeVisible[t.id];
                 typeInputs[t.id].checked = on;
                 typeInputs[t.id].closest('.row').classList.toggle('is-off', !on);
-                legendRows[t.id].classList.toggle('is-off', !on);
             });
             const syncTri = (input, ids) => {
                 const count = ids.filter((id) => typeVisible[id]).length;
@@ -1136,6 +1171,7 @@
                 if (groupInputs[g.id]) syncTri(groupInputs[g.id], types.filter((t) => t.group === g.id).map((t) => t.id));
             });
             syncTri(masterInput, types.map((t) => t.id));
+            landmarkButtons.forEach((button, marker) => button.classList.toggle('is-off', !typeVisible[marker.type.id]));
         }
  
         // One switch row: a real checkbox, an optional swatch, a label, and the visual switch
@@ -1149,24 +1185,29 @@
         }
  
         const legendBody = $('legend-body');
+        $('legend').querySelector('.panel-head span').textContent = 'Landmarks';
         const markerControls = $('marker-controls');
  
         const master = switchRow({ label: 'Markers', extraClass: 'section-head' });
         masterInput = master.input;
         master.input.addEventListener('change', () => setTypesVisible(types.map((t) => t.id), master.input.checked));
         markerControls.append(master.row);
+
+        const landmarkName = marker => marker.landmark.place
+            ? marker.landmark.place + ' · ' + marker.landmark.name : marker.landmark.name;
+        [...markers].sort((a, b) => landmarkName(a).localeCompare(landmarkName(b))).forEach(marker => {
+            const name = landmarkName(marker);
+            const button = el('button', {type: 'button', class: 'landmark-jump', title: marker.landmark.name,
+                'aria-label': 'Center on ' + name, 'aria-current': 'false'}, el('span', {}, name));
+            button.style.setProperty('--landmark-color', marker.type.color);
+            button.addEventListener('click', () => focusLandmark(marker));
+            landmarkButtons.set(marker, button);
+            legendBody.append(button);
+        });
  
         groups.forEach((g) => {
             const groupTypes = types.filter((t) => t.group === g.id);
             if (!groupTypes.length) return;
- 
-            // legend
-            legendBody.append(el('p', { class: 'group-title' }, g.label));
-            groupTypes.forEach((t) => {
-                const row = el('div', { class: 'legend-row' }, createSwatch(t), el('span', { class: 'row-label' }, t.label));
-                legendRows[t.id] = row;
-                legendBody.append(row);
-            });
  
             // controls
             const head = switchRow({ label: g.label, extraClass: 'row-group' });
@@ -1223,6 +1264,7 @@
             });
  
             // Gentler dragging when zoomed in
+            updateLandmarkFocus(dt);
             const t = THREE.MathUtils.clamp(
                 (camera.position.length() - controls.minDistance) / (controls.maxDistance - controls.minDistance), 0, 1);
             controls.rotateSpeed = 0.15 + 0.55 * t;

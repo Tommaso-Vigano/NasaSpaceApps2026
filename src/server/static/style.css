@@ -117,6 +117,16 @@ html, body {
     font-size: 13px;
 }
 .legend { left: 20px; bottom: 20px; }
+#legend-body { max-height: min(38vh, 320px); overflow-y: auto; overscroll-behavior: contain; }
+.landmark-jump {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 7px 8px; border: 0; border-radius: 4px; background: transparent;
+    color: var(--dust); font: inherit; line-height: 1.4; text-align: left;
+    cursor: pointer; overflow-wrap: anywhere;
+}
+.landmark-jump::before { content: ''; flex: none; width: 5px; height: 5px; border-radius: 50%; background: var(--landmark-color, var(--dust-dim)); }
+.landmark-jump:hover, .landmark-jump[aria-current="location"] { background: rgba(229, 228, 225, .08); }
+.landmark-jump:focus-visible { outline: 2px solid var(--pin); outline-offset: -2px; }
 .display-panels {
     position: fixed;
     right: 20px;

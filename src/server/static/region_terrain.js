@@ -295,7 +295,8 @@
                 if (!active || current !== version) return;
                 if (!response.ok) throw new Error(result.error || 'Could not load terrain.');
                 build(result, fitCamera);
-                message('Read-only · ' + result.shape[1] + ' × ' + result.shape[0] + ' · height ×' + HEIGHT_SCALE);
+                message('Read-only · ' + result.shape[1] + ' × ' + result.shape[0] + ' · height ×' + HEIGHT_SCALE
+                    + (result.imputed_cells ? ' · gaps filled' : ''));
             } catch (error) {
                 if (error.name === 'AbortError' || current !== version) return;
                 if (!model) hide();
