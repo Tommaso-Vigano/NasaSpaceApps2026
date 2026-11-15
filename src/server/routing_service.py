@@ -7,7 +7,6 @@ from pyproj import CRS, Transformer
 import rasterio
 from rasterio.windows import Window
 
-from src.app.penalty.configure_penalty import configure_penalties
 from src.app.routing_executor import RoutingExecutor
 from src.basic import Coordinate
 from src.data.data_model import WorldModel
@@ -71,13 +70,6 @@ def route_region(regions, sector_id, payload):
                                    Coordinate(lat=reference.bottom_right[1], lon=reference.bottom_right[0]),
                                    HumanProfile())
 
-        configure_penalties(
-            executor.penalty_manager,
-            temperature_limit=300.0,
-            albedo_weight=2.0,
-            radiation_threshold=10.0,
-            radiation_weight=2.0,
-        )
         result = executor.execute(world_slice, *points, elevation_map=elevation, compact=True)
         if not result.found:
             raise NoRouteError("No traversable route was found at this fineness. Try different endpoints or subdivisions.")
