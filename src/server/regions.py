@@ -22,7 +22,6 @@ class Regions:
         self.sectors = {}
         self._map_ids = {}
         self._source_maps = {}
-        self._styles = {}
         for map_ in world_model.get_maps_by_datatype(Datatype.ELEVATION):
             try:
                 path = Path(json.loads(map_.metadata)["source"]).resolve()
@@ -118,23 +117,22 @@ class Regions:
             values = source.read(1, window=window, out_shape=(out_h, out_w),
                                  masked=True, resampling=Resampling.average).astype(float)
             values = (values * source.scales[0] + source.offsets[0]).filled(np.nan)
-            # A tiny overview gives every viewport the same display contrast.
-            version = (sector["path"].stat().st_mtime_ns, source.width, source.height)
-            cached = self._styles.get(sector_id)
-            if cached is None or cached[0] != version:
-                sample = source.read(1, out_shape=(min(128, source.height), min(128, source.width)),
-                                     masked=True, resampling=Resampling.average).astype(float)
-                sample = (sample * source.scales[0] + source.offsets[0]).filled(np.nan)
-                valid = sample[np.isfinite(sample)]
-                limits = np.percentile(valid, [2, 98]) if valid.size else [0, 1]
-                self._styles[sector_id] = (version, limits)
-            low, high = self._styles[sector_id][1]
+            # Stretch only this visible window: a whole-TIFF range can hide
+            # local relief in low-valued or nearly flat terrain. This changes
+            # PNG display colours only, never elevation/routing values.
             valid = np.isfinite(values)
             grey = np.zeros(values.shape, dtype=np.uint8)
-            if high > low:
-                grey[valid] = np.round(np.clip((values[valid]-low)/(high-low), 0, 1)*255).astype(np.uint8)
-            else:
-                grey[valid] = 160
+            if valid.any():
+                samples = values[valid]
+                low, high = np.percentile(samples, [2, 98])
+                if high <= low:
+                    low, high = samples.min(), samples.max()
+                if high > low:
+                    normalized = np.clip((samples-low)/(high-low), 0, 1)
+                    # Reserve black for the background and gently lift shadows.
+                    grey[valid] = np.round(32 + 208 * normalized**.8).astype(np.uint8)
+                else:
+                    grey[valid] = 160
             rgba = np.stack((grey, grey, grey, valid.astype(np.uint8)*255), axis=-1)
             buffer = BytesIO()
             Image.fromarray(rgba).save(buffer, format="PNG")
