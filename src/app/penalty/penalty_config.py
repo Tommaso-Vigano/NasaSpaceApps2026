@@ -84,6 +84,7 @@ class PenaltyWeights:
     wind_speed_max_ms: Optional[float] = None
     temperature_min_k: Optional[float] = None
     temperature_max_k: Optional[float] = None
+    albedo_weight: Optional[float] = None
 
 
 Factory = Callable[[], Penalty]
@@ -104,9 +105,9 @@ def _same(factory: Factory) -> Callable[[Profile], Penalty]:
     return _selector(factory, factory)
 
 
-def register_default_penalties(manager, weights: Optional[PenaltyWeights] = None):
-    """Register the default selector of every Datatype on ``manager``
-    (a FixedPenaltyManager: it needs ``ignored_datatypes``). Returns the manager."""
+def default_penalty_rules(weights: Optional[PenaltyWeights] = None):
+    """Return profile selectors and ignored datatypes without changing a manager."""
+    ignored = set()
     weights = PenaltyWeights() if weights is None else weights
     astronaut, rover = Astronaut(), RoboticRover()
 
@@ -145,7 +146,7 @@ def register_default_penalties(manager, weights: Optional[PenaltyWeights] = None
     if weights.wind_speed_max_ms is not None:
         rules[Datatype.WIND_SPEED] = _same(lambda: CutOffPenalty(weights.wind_speed_max_ms))
     else:
-        manager.ignored_datatypes.add(Datatype.WIND_SPEED)
+        ignored.add(Datatype.WIND_SPEED)
 
     t_min, t_max = weights.temperature_min_k, weights.temperature_max_k
     if t_min is not None or t_max is not None:
@@ -158,8 +159,17 @@ def register_default_penalties(manager, weights: Optional[PenaltyWeights] = None
             return parts[0] if len(parts) == 1 else CombinedPenalty(parts)
         rules[Datatype.TEMPERATURE] = _same(temperature)
     else:
-        manager.ignored_datatypes.add(Datatype.TEMPERATURE)
+        ignored.add(Datatype.TEMPERATURE)
 
+    if weights.albedo_weight is not None:
+        rules[Datatype.ALBEDO] = _same(lambda: WeightPenalty(weights.albedo_weight))
+    return rules, ignored
+
+
+def register_default_penalties(manager, weights: Optional[PenaltyWeights] = None):
+    """Compatibility entry point for existing demos and callers."""
+    rules, ignored = default_penalty_rules(weights)
+    manager.ignored_datatypes.update(ignored)
     for data_type, selector in rules.items():
         manager.register_penalty(data_type, selector)
         manager.ignored_datatypes.discard(data_type)

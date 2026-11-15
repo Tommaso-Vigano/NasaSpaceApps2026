@@ -55,6 +55,7 @@ from typing import Iterable, Optional
 import numpy as np
 
 from src.app.penalty.implementations.penalty import Penalty
+from src.app.penalty.implementations.zero_penalty import ZeroPenalty
 from src.app.penalty.implementations.progressive_cutoff import ProgressiveCutoff
 from src.app.penalty.penalty_manager import PenaltyComponents, PenaltyManager
 from src.constants import (
@@ -243,6 +244,8 @@ class FixedPenaltyManager(PenaltyManager):
     def select_slope_cost_function(self, profile: Profile) -> Penalty:
         """ProgressiveCutoff(limit, weight): weight * |slope| / limit, inf at the limit.
         For an expedition: the strictest limit and the largest weight."""
+        if not self.slope_enabled:
+            return ZeroPenalty()
         weight = max(self.slope_weights[_kind(p)] for p in _participants(profile))
         return ProgressiveCutoff(threshold=self._get_slope_limit(profile), weight=weight)
 

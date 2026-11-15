@@ -1,4 +1,5 @@
-from dataclasses import replace
+import json
+from dataclasses import fields, replace
 from enum import Enum
 from math import asin, atan2, cos, degrees, radians, sin, sqrt
 from typing import Callable, Iterable
@@ -17,6 +18,7 @@ from src.routing.profiles import (
 
 from .implementations.penalty import Penalty
 from .implementations.progressive_cutoff import ProgressiveCutoff
+from .implementations.zero_penalty import ZeroPenalty
 
 
 class PenaltyErrorCode(Enum):
@@ -106,6 +108,81 @@ class PenaltyManager:
 
     def __init__(self):
         self.penalties: dict[Datatype, PenaltySelector] = {}
+        self.slope_enabled = True
+
+    def configure_from_json(self, profile: Profile, config: dict | str) -> None:
+        """Replace penalty selection using a decoded JSON object or JSON text.
+
+        Schema: {"penalties": {"STEP_HEIGHT": true, "SLOPE": true},
+                 "weights": {"visibility": 0.5}}
+        Omitted switches are disabled. Names are Datatype member names, plus
+        SLOPE for elevation edge penalties. Cost formulas and profile-specific
+        thresholds come from the existing default rules, not from the JSON.
+        Validation completes before any manager state is changed.
+        """
+        # Import lazily: the existing rule module also supports the subclass
+        # FixedPenaltyManager and imports its profile helpers.
+        from .penalty_config import PenaltyWeights, default_penalty_rules
+        from .penalty_manager_fixed import _participants
+
+        if isinstance(config, str):
+            config = json.loads(config)
+        if not isinstance(config, dict):
+            raise ValueError("Penalty configuration must be a JSON object.")
+        if set(config) - {"penalties", "weights"}:
+            raise ValueError("Only 'penalties' and 'weights' are allowed.")
+        switches = config.get("penalties", {})
+        weights = config.get("weights", {})
+        if not isinstance(switches, dict) or not isinstance(weights, dict):
+            raise ValueError("'penalties' and 'weights' must be JSON objects.")
+        cell_types = set(Datatype) - {Datatype.ELEVATION, Datatype.PENALTY}
+        allowed = {dt.name for dt in cell_types} | {"SLOPE"}
+        for name, enabled in switches.items():
+            if name not in allowed:
+                raise ValueError(f"Unknown penalty {name!r}; use SLOPE for elevation.")
+            if type(enabled) is not bool:
+                raise ValueError(f"Penalty switch {name!r} must be true or false.")
+        weight_names = {field.name for field in fields(PenaltyWeights)}
+        if set(weights) - weight_names:
+            raise ValueError(f"Unknown weight/threshold keys: {set(weights) - weight_names}")
+        for name, value in weights.items():
+            if value is None:
+                if name == "visibility":
+                    raise ValueError("visibility must be a nonnegative number.")
+                continue
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not np.isfinite(value) or value < 0):
+                raise ValueError(f"{name} must be a finite nonnegative number or null.")
+        low, high = weights.get("temperature_min_k"), weights.get("temperature_max_k")
+        if low is not None and high is not None and low >= high:
+            raise ValueError("temperature_min_k must be less than temperature_max_k.")
+        _participants(profile)  # Reject unknown profiles and empty expeditions.
+        rules, _ = default_penalty_rules(PenaltyWeights(**weights))
+        selected = {}
+        for data_type in cell_types:
+            if switches.get(data_type.name, False):
+                if data_type not in rules:
+                    raise ValueError(
+                        f"No default rule configured for {data_type.name}. "
+                        "TEMPERATURE, WIND_SPEED and ALBEDO require explicit "
+                        "thresholds/weights; unsupported layers cannot be enabled."
+                    )
+                selector = rules[data_type]
+                selector(profile)  # Validate the selected profile's rule now.
+                selected[data_type] = selector
+            else:
+                selected[data_type] = lambda profile: ZeroPenalty()
+        slope_enabled = switches.get("SLOPE", False)
+        if slope_enabled:
+            self._get_slope_limit(profile)
+        # Commit a full replacement, preventing stale registrations on reuse.
+        self.penalties = selected
+        self.slope_enabled = slope_enabled
+        if hasattr(self, "ignored_datatypes"):
+            self.ignored_datatypes = {
+                dt for dt in cell_types if not switches.get(dt.name, False)
+            }
+
 
     def register_penalty(
         self,
@@ -195,6 +272,8 @@ class PenaltyManager:
 
     def select_slope_cost_function(self, profile: Profile) -> Penalty:
         """Increase slope cost progressively, then block at the limit."""
+        if not self.slope_enabled:
+            return ZeroPenalty()
         return ProgressiveCutoff(
             threshold=self._get_slope_limit(profile),
             weight=1.0,
@@ -401,8 +480,9 @@ class PenaltyManager:
         Infinite, missing, or excessive slope penalties remove edges.
         Finite penalties, including zero, are added to base edge costs.
         """
-        # Validate the profile before changing the graph.
-        self._get_slope_limit(profile)
+        # Validate the active slope policy before changing the graph.
+        if self.slope_enabled:
+            self._get_slope_limit(profile)
 
         # Skipping missing elevations during slope calculation alone
         # would otherwise leave their original graph connections intact.
