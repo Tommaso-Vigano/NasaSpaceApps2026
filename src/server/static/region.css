@@ -2,7 +2,7 @@
 body { margin: 0; background: #181c22; color: #ead9c8; font: 14px system-ui, sans-serif; }
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 header, nav, #map-status { position: fixed; background: rgba(14, 17, 22, .88); border: 1px solid #53514e; border-radius: 10px; padding: 12px 16px; }
-header { top: 16px; left: 16px; max-width: calc(100vw - 32px); display: flex; align-items: center; gap: 10px; }
+header { top: 16px; left: 16px; max-width: calc(100vw - 340px); display: flex; align-items: center; gap: 10px; }
 header h1 { font-size: 18px; font-weight: 500; margin: 0; overflow-wrap: anywhere; }
 .back-link { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px; color: inherit; border-radius: 4px; }
 .back-link svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -60,7 +60,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 #routing-profile { width: 100%; padding: 8px; background: #252a31; color: inherit; border: 1px solid #53514e; border-radius: 4px; font: inherit; color-scheme: dark; }
 #routing-profile:focus-visible { outline: 2px solid #a4f5d5; outline-offset: 2px; }
 @media (max-width: 700px) {
-    header { max-width: calc(100vw - 160px); font-size: 12px; padding: 8px; }
+    header { max-width: calc(100vw - 32px); font-size: 12px; padding: 8px; }
     header h1 { font-size: 14px; } header p { display: none; }
     .routing-panel { left: 10px; width: 255px; padding: 10px; max-height: calc(100vh - 250px); }
 }
@@ -89,7 +89,7 @@ header, nav, #map-status, .routing-panel, .constraints-panel, .photos-control { 
 .photo-marker[hidden] { display: none; }
 .photo-marker:hover, .photo-marker:focus-visible { background: #6a5940; z-index: 1; }
 .photos-control {
-    position: fixed; right: 16px; top: 16px; padding: 12px 14px;
+    position: fixed; right: 16px; top: 80px; padding: 12px 14px;
     background: rgba(14, 17, 22, .92); border: 1px solid #53514e; border-radius: 6px;
     font-size: 12px;
 }
@@ -101,7 +101,7 @@ dialog {
 }
 .photo-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .photo-heading button { border: 0; font-size: 22px; padding: 0 6px; }
-#photo-stop { position: fixed; z-index: 3; inset: 90px 16px auto auto; margin: 0; padding: 12px; width: min(240px, calc(100vw - 32px)); }
+#photo-stop { position: fixed; z-index: 3; inset: 155px 16px auto auto; margin: 0; padding: 12px; width: min(240px, calc(100vw - 32px)); }
 #photo-stop-title { font-size: 13px; }
 #photo-stop-coordinates { margin: 6px 0 12px; font-size: 12px; color: #b9a592; }
 #photo-thumbnails { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
@@ -113,6 +113,28 @@ dialog {
 #photo-full { display: block; width: 100%; max-height: 62vh; object-fit: contain; background: #111; }
 #photo-caption { margin-top: 12px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
-    .photos-control { right: 10px; top: 95px; padding: 8px; }
-    #photo-stop { top: 170px; }
+    .photos-control { right: 10px; top: 140px; padding: 8px; }
+    #photo-stop { top: 210px; }
+}
+
+#terrain-view { position: fixed; inset: 0; }
+.terrain-tools {
+    position: fixed; top: 16px; right: 16px; z-index: 3;
+    display: grid; grid-template-columns: auto 90px 38px; align-items: center; gap: 10px;
+    padding: 8px 10px; border: 1px solid #53514e; border-radius: 6px; background: rgba(14, 17, 22, .92);
+}
+.terrain-tools label { font-size: 11px; color: #b9a592; }
+.terrain-tools output { display: block; margin-top: 2px; color: #ead9c8; font-variant-numeric: tabular-nums; }
+#mesh-detail { width: 90px; margin: 0; accent-color: #a4f5d5; }
+#terrain-toggle { display: grid; place-items: center; width: 38px; height: 38px; padding: 8px; }
+#terrain-toggle svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+#terrain-toggle .terrain-icon-2d { display: none; }
+#terrain-toggle[aria-pressed="true"] .terrain-icon-3d { display: none; }
+#terrain-toggle[aria-pressed="true"] .terrain-icon-2d { display: block; }
+#terrain-status { grid-column: 1 / -1; max-width: 240px; font-size: 11px; line-height: 1.5; margin: 0; }
+.is-3d #region-canvas { visibility: hidden; pointer-events: none; }
+.is-3d .routing-panel { opacity: .4; pointer-events: none; }
+.is-3d #photo-markers, .is-3d .photos-control, .is-3d .map-controls, .is-3d #map-status { display: none; }
+@media (max-width: 700px) {
+    .terrain-tools { top: 76px; right: 10px; }
 }

@@ -76,6 +76,7 @@ class WebServer:
                 abort(400, description=str(error))
             info["frame_url"] = url_for("region_frame", sector_id=sector_id)
             info["route_url"] = url_for("region_route", sector_id=sector_id)
+            info['terrain_url'] = url_for('region_terrain', sector_id=sector_id)
             if self.perseverance_photos.available(sector_id):
                 info['photos_url'] = url_for('region_photos', sector_id=sector_id)
             return render_template("region.html", region=info)
@@ -111,6 +112,20 @@ class WebServer:
                 abort(400, description=str(error))
             finally:
                 self._routing_slot.release()
+
+        @self.app.get('/api/regions/<sector_id>/terrain')
+        def region_terrain(sector_id):
+            from src.server.terrain_preview import terrain_preview
+            if sector_id not in self.regions.sectors:
+                abort(404, description='Unknown sector.')
+            try:
+                coordinates = [float(request.args[name]) for name in ('x', 'y', 'width', 'height')]
+                samples = int(request.args.get('samples', 192))
+                return jsonify(terrain_preview(self.regions.get(sector_id)['path'], *coordinates, samples))
+            except KeyError:
+                abort(400, description='Supply x, y, width and height for the viewport.')
+            except (ValueError, OSError) as error:
+                abort(400, description=str(error))
 
         @self.app.get("/api/regions/<sector_id>/frame.png")
         def region_frame(sector_id):

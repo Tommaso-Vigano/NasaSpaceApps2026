@@ -8,7 +8,7 @@
     const initial = config.initial_view;
     const photos = window.createPhotoStops(config, canvas);
     const endpoints = [];
-    let route = [], routeController = null, routing = false;
+    let route = [], routeController = null, routing = false, mode3D = false;
     const routeStatus = document.getElementById('route-status');
     const routeButton = document.getElementById('calculate-route');
     const clearButton = document.getElementById('clear-endpoints');
@@ -24,6 +24,26 @@
     const constraintsPanel = constraintOptions.closest('.constraints-panel');
     if (constraintsPanel.closest('.routing-panel')) document.body.append(constraintsPanel);
     let heatmaps = null;
+    const terrain = window.createTerrainPreview?.(config, {
+        getView: () => view,
+        getRoute: () => route,
+        getEndpoints: () => endpoints.map(point => [point.x, point.y]),
+        getHeatmaps: () => heatmaps,
+        onModeChange(active) {
+            mode3D = active;
+            document.body.classList.toggle('is-3d', active);
+            const panel = document.querySelector('.routing-panel');
+            panel.inert = active;
+            panel.setAttribute('aria-disabled', String(active));
+            if (profileButton) profileButton.disabled = active;
+            if (profilePanel) profilePanel.hidden = true;
+            if (active) {
+                controller?.abort(); clearTimeout(timer); generation++; drag = null;
+                document.getElementById('photo-stop')?.close();
+            } else resize();
+            updateRouteControls();
+        },
+    });
 
     if (profileButton && profilePanel && profileSelect) {
         function setProfilePanel(open) {
@@ -152,10 +172,12 @@
         return '(' + lat.toFixed(5) + ', ' + (((lon+180)%360+360)%360-180).toFixed(5) + ')';
     }
     function updateRouteControls() {
-        routeButton.disabled = routing || endpoints.length !== 2;
-        clearButton.disabled = routing || endpoints.length === 0;
-        subdivisionSlider.disabled = routing;
-        if (profileSelect) profileSelect.disabled = routing;
+        routeButton.disabled = mode3D || routing || endpoints.length !== 2;
+        clearButton.disabled = mode3D || routing || endpoints.length === 0;
+        subdivisionSlider.disabled = mode3D || routing;
+        if (profileSelect) profileSelect.disabled = mode3D || routing;
+        const terrainButton = document.getElementById('terrain-toggle');
+        if (terrainButton) terrainButton.disabled = routing;
         const list = document.getElementById('route-endpoints');
         list.replaceChildren(...['Start', 'End'].map((name, index) => {
             const item = document.createElement('li');
@@ -212,7 +234,7 @@
     canvas.addEventListener('pointerdown', (event) => {
         if (event.button !== 2) return;
         event.preventDefault();
-        if (routing) return;
+        if (routing || mode3D) return;
         const point = pixelAt(event);
         if (!point) { routeStatus.textContent = 'Select a point inside the sector.'; return; }
         if (endpoints.length === 2) endpoints.length = 0;
@@ -226,13 +248,14 @@
     });
     canvas.addEventListener('pointerleave', () => { mouseCoordinate.textContent = '-'; });
     clearButton.addEventListener('click', () => {
+        if (mode3D) return;
         endpoints.length = 0; route = []; clearHeatmaps();
         routeStatus.textContent = '';
         updateRouteControls(); draw();
     });
     subdivisionSlider.addEventListener('input', updateFineness);
     routeButton.addEventListener('click', async () => {
-        if (routing || endpoints.length !== 2) return;
+        if (mode3D || routing || endpoints.length !== 2) return;
         routing = true; route = []; clearHeatmaps(); updateRouteControls(); draw();
         routeStatus.textContent = 'Computing route...';
         routeController = new AbortController();
@@ -267,6 +290,7 @@
             : Math.max(0, Math.min(config.height - view.height, view.y));
     }
     function draw() {
+        if (mode3D) { terrain?.updateOverlays(heatmaps); return; }
         photos.update(view);
         context.fillStyle = '#22272e';
         context.fillRect(0, 0, canvas.width, canvas.height);
@@ -315,6 +339,7 @@
         }
     }
     function fit() {
+        if (mode3D) return;
         const aspect = canvas.width / canvas.height;
         const width = Math.max(initial.width, initial.height * aspect) * 1.05;
         const height = width / aspect;
@@ -323,6 +348,7 @@
         constrain(); schedule();
     }
     function resize() {
+        if (mode3D) return;
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = Math.round(innerWidth * ratio);
         canvas.height = Math.round(innerHeight * ratio);
@@ -333,6 +359,7 @@
         constrain(); schedule();
     }
     function zoom(factor, px = 0.5, py = 0.5) {
+        if (mode3D) return;
         const width = Math.max(8, Math.min(config.width * 2, view.width * factor));
         const height = width * canvas.height / canvas.width;
         view.x += (view.width-width)*px;
@@ -347,7 +374,7 @@
              (event.clientX-rect.left)/rect.width, (event.clientY-rect.top)/rect.height);
     }, {passive: false});
     canvas.addEventListener('pointerdown', (event) => {
-        if (event.button !== 0) return;
+        if (mode3D || event.button !== 0) return;
         drag = {id: event.pointerId, x: event.clientX, y: event.clientY};
         canvas.setPointerCapture(event.pointerId); canvas.style.cursor = 'grabbing';
     });
@@ -369,6 +396,6 @@
     document.getElementById('zoom-out').addEventListener('click', () => zoom(2));
     document.getElementById('fit-region').addEventListener('click', fit);
     window.addEventListener('resize', resize);
-    window.addEventListener('pagehide', () => { controller?.abort(); clearTimeout(timer); frame?.image.close(); routeController?.abort(); });
+    window.addEventListener('pagehide', () => { controller?.abort(); clearTimeout(timer); frame?.image.close(); routeController?.abort(); terrain?.dispose(); });
     resize();
 })();

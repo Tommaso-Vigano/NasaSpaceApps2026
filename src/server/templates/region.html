@@ -8,6 +8,16 @@
 </head>
 <body>
     <canvas id="region-canvas" aria-label="Regional map. Drag to pan; scroll to zoom."></canvas>
+    <div id="terrain-view" aria-label="Read-only 3D terrain preview" hidden></div>
+    <div class="terrain-tools">
+        <label for="mesh-detail">Mesh detail <output id="mesh-detail-value">192</output></label>
+        <input id="mesh-detail" type="range" min="64" max="512" step="64" value="192">
+        <button id="terrain-toggle" type="button" aria-label="Show 3D terrain" title="Show 3D terrain" aria-pressed="false">
+            <svg class="terrain-icon-3d" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5v8l-9 5-9-5V8zM3 8l9 5 9-5M12 13v8"/></svg>
+            <svg class="terrain-icon-2d" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/></svg>
+        </button>
+        <p id="terrain-status" role="status" hidden></p>
+    </div>
     <header>
         <a class="back-link" href="{{ url_for('planet') }}" aria-label="Back to Mars" title="Back to Mars">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg>
@@ -68,7 +78,7 @@
         <figure><img id="photo-full" alt=""><figcaption id="photo-caption"></figcaption></figure>
     </dialog>
     {% endif %}
-    <nav aria-label="Map controls">
+    <nav class="map-controls" aria-label="Map controls">
         <button id="zoom-in" aria-label="Zoom in">+</button>
         <button id="zoom-out" aria-label="Zoom out">&minus;</button>
         <button id="fit-region">Fit selection</button>
@@ -76,6 +86,8 @@
     <p id="map-status" role="status">Loading region...</p>
     <script id="region-config" type="application/json">{{ region | tojson }}</script>
     <script src="{{ url_for('static', filename='region_photos.js') }}"></script>
+    <script src="{{ url_for('static', filename='region_overlays.js') }}"></script>
+    <script src="{{ url_for('static', filename='region_terrain.js') }}"></script>
     <script src="{{ url_for('static', filename='region.js') }}"></script>
 </body>
 </html>
