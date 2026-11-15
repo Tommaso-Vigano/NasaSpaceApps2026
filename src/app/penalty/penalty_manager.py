@@ -197,7 +197,7 @@ class PenaltyManager:
         """Increase slope cost progressively, then block at the limit."""
         return ProgressiveCutoff(
             threshold=self._get_slope_limit(profile),
-            weight=1.0,
+            weight=12.0,
         )
 
     def _construct_cost_pipeline(

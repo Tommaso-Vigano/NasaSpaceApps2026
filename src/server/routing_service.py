@@ -7,7 +7,6 @@ from pyproj import CRS, Transformer
 import rasterio
 from rasterio.windows import Window
 
-from src.app.penalty.configure_penalty import configure_penalties
 from src.app.routing_executor import RoutingExecutor
 from src.basic import Coordinate
 from src.data.data_model import WorldModel
