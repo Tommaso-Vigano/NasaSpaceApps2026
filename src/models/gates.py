@@ -11,13 +11,24 @@ import math
 
 import numpy as np
 
-# substrings of the columns we use; any other column is ignored
-COL_TIME = "Local time"
-COL_FLUX = "solar flux"
-COL_TAU = "optical depth"
-COL_TEMP = "Temperature (K)"
-COL_WIND = "wind speed"
-_KEYS = (COL_TIME, COL_FLUX, COL_TAU, COL_TEMP, COL_WIND)
+# Column substrings (any other column is ignored), the exclusion table and the gate
+# thresholds live in src/constants.py; the COL_* names are re-exported from here.
+from src.constants import (  # noqa: F401
+    COL_FLUX,
+    COL_TAU,
+    COL_TEMP,
+    COL_TIME,
+    COL_TSURF,
+    COL_WIND,
+    DUST_TAU_MAX,
+    MCD_COLUMN_EXCLUDE,
+    MCD_COLUMN_KEYS,
+    SOLAR_FLUX_MIN_W_M2,
+)
+
+
+def _matches(key, name):
+    return key in name and not any(w in name.lower() for w in MCD_COLUMN_EXCLUDE.get(key, ()))
 
 
 def _to_float(text):
@@ -31,9 +42,12 @@ def load_mcd_diurnal(csv_path):
     """Read an MCD diurnal CSV -> dict {original column name: np.array}.
 
     Blank lines and lines starting with '#' are skipped; the first remaining
-    row is the header. Only the first column matching each of "Local time",
-    "solar flux", "optical depth", "Temperature (K)", "wind speed" is kept.
-    Non-numeric cells become NaN.
+    row is the header. Columns are matched by substring and only the first
+    column matching each of "Local time", "solar flux", "optical depth",
+    "Temperature (K)" (air), "Surface temperature", "wind speed" is kept.
+    The air key "Temperature (K)" skips any column containing "surface"
+    (case-insensitive), so air and surface temperature are both kept and never
+    swapped, in any column order. Non-numeric cells become NaN.
     """
     with open(csv_path, newline="", encoding="utf-8") as f:
         rows = [
@@ -47,9 +61,9 @@ def load_mcd_diurnal(csv_path):
     data = rows[1:]
 
     out = {}
-    for key in _KEYS:
+    for key in MCD_COLUMN_KEYS:
         for j, name in enumerate(header):
-            if key in name:
+            if _matches(key, name):
                 out[name] = np.array(
                     [_to_float(r[j]) if j < len(r) else math.nan for r in data]
                 )
@@ -59,12 +73,12 @@ def load_mcd_diurnal(csv_path):
 
 def _column(mcd, substring):
     for name, values in mcd.items():
-        if substring in name:
+        if _matches(substring, name):
             return np.asarray(values, dtype=np.float64)
     raise KeyError(f"No MCD column containing {substring!r}; columns: {list(mcd)}")
 
 
-def daylight_window(mcd, min_flux=100.0):
+def daylight_window(mcd, min_flux=SOLAR_FLUX_MIN_W_M2):
     """(start_h, end_h) when the horizontal solar flux is >= ``min_flux``
     (W/m^2), interpolating linearly between hourly samples. (nan, nan) if the
     flux never reaches the threshold. Assumes a single contiguous daytime window.
@@ -89,7 +103,7 @@ def daylight_window(mcd, min_flux=100.0):
     return start, end
 
 
-def dust_storm_nogo(mcd, tau_max=2.0):
+def dust_storm_nogo(mcd, tau_max=DUST_TAU_MAX):
     """True if the dust optical depth reaches ``tau_max``.
 
     TEAM ASSUMPTION: tau >= 2 means an active dust storm -> NO-GO.
@@ -102,7 +116,7 @@ def solar_power_ratio(mcd, mcd_reference):
     return float(np.nanmax(_column(mcd, COL_FLUX)) / np.nanmax(_column(mcd_reference, COL_FLUX)))
 
 
-def eva_go(mcd, start_h, duration_h, min_flux=100.0, tau_max=2.0):
+def eva_go(mcd, start_h, duration_h, min_flux=SOLAR_FLUX_MIN_W_M2, tau_max=DUST_TAU_MAX):
     """(go, reasons): NO-GO if a dust storm is active or the EVA
     [start_h, start_h + duration_h] leaves the daylight window."""
     reasons = []

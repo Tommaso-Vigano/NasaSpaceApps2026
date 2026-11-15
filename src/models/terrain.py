@@ -14,12 +14,9 @@ NaN (or inf for costs).
 import json
 
 import numpy as np
-from numpy.lib.stride_tricks import sliding_window_view
 
-from src.models.constraints import MARS_RADIUS_M
-
-OFFSETS = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
-DIRECTION_NAMES = ("N", "NE", "E", "SE", "S", "SO", "O", "NO")
+# OFFSETS and DIRECTION_NAMES live in src/constants.py and are re-exported from here.
+from src.constants import DIRECTION_NAMES, MARS_RADIUS_M, OFFSETS  # noqa: F401
 
 
 def horizontal_lengths(dx: float, dy: float) -> np.ndarray:
@@ -86,32 +83,107 @@ def smooth_mean(z: np.ndarray, k: int) -> np.ndarray:
     partial (this biases the mean on ramps there). Cells whose window has no
     valid value are NaN.
     """
-    if k < 1 or k % 2 == 0:
-        raise ValueError("k must be a positive odd integer.")
-    z = np.asarray(z, dtype=np.float64)
-    half = k // 2
-    padded = np.pad(z, half, mode="constant", constant_values=np.nan)
-    windows = sliding_window_view(padded, (k, k))
-    valid = np.isfinite(windows)
-    total = np.where(valid, windows, 0.0).sum(axis=(-2, -1))
-    count = valid.sum(axis=(-2, -1))
-    out = np.full(z.shape, np.nan)
+    total, count = _window_sum_count(z, k)
+    out = np.full(count.shape, np.nan)
     np.divide(total, count, out=out, where=count > 0)
     return out
 
 
-def edge_steps(z: np.ndarray, k: int = 5) -> np.ndarray:
+def _window_sum_count(z: np.ndarray, k: int, pad_mode: str = "nan") -> tuple:
+    """Sum of the finite values and number of finite values in the k x k
+    window centred on every cell (k odd).
+
+    pad_mode "nan": outside the grid counts as NaN (missing).
+    pad_mode "odd": the grid is extended by odd reflection,
+    ``np.pad(z, k // 2, mode="reflect", reflect_type="odd")``, i.e.
+    2 * z_border - z_mirror, which continues a linear ramp exactly; NaN cells
+    reflect to NaN.
+    """
+    if k < 1 or k % 2 == 0:
+        raise ValueError("k must be a positive odd integer.")
+    if pad_mode not in ("nan", "odd"):
+        raise ValueError("pad_mode must be 'nan' or 'odd'.")
+    z = np.asarray(z, dtype=np.float64)
+    half = k // 2
+    if pad_mode == "nan":
+        padded = np.pad(z, half, mode="constant", constant_values=np.nan)
+    else:
+        padded = np.pad(z, half, mode="reflect", reflect_type="odd")
+    # Separable box sum with cumulative sums: O(cells) instead of the k*k-times larger
+    # sliding_window_view temporary. Values are shifted by a reference elevation
+    # before summing, so the cumulative sums stay small (rounding ~1e-12 m).
+    valid = np.isfinite(padded)
+    ref = float(np.median(padded[valid])) if valid.any() else 0.0
+    total = _box_sum(np.where(valid, padded - ref, 0.0), k)
+    count = _box_sum(valid.astype(np.int64), k)
+    return total + count * ref, count
+
+
+def _box_sum(a: np.ndarray, k: int) -> np.ndarray:
+    """Sum over every k x k window of ``a`` ('valid' windows: shape - (k - 1))."""
+    for axis in (0, 1):
+        c = np.cumsum(a, axis=axis)
+        zero = np.zeros_like(np.take(c, [0], axis=axis))
+        c = np.concatenate([zero, c], axis=axis)
+        n = c.shape[axis]
+        a = np.take(c, np.arange(k, n), axis=axis) - np.take(c, np.arange(0, n - k), axis=axis)
+    return a
+
+
+def step_reference_mean(z: np.ndarray, k: int) -> np.ndarray:
+    """k x k reference mean used by ``edge_steps`` (``smooth_mean`` is unchanged).
+
+    - Near the grid border the window is completed by odd reflection
+      (see ``_window_sum_count``), so a linear ramp gives exactly the ramp
+      value and creates no fake step, while a real step at the border stays
+      visible.
+    - Windows containing NaN (interior nodata holes, or NaN border cells whose
+      reflection is NaN) fall back to the mean of their finite values only, as
+      ``smooth_mean`` does. TEAM ASSUMPTION: this can create some fake steps
+      around holes; it is the prudent choice (a fake step blocks, never opens).
+    NaN where the window has no finite value.
+    """
+    total, count = _window_sum_count(z, k, pad_mode="odd")
+    full = count == k * k
+    out = smooth_mean(z, k)
+    np.divide(total, count, out=out, where=full)
+    return out
+
+
+def edge_steps(z: np.ndarray, k: int = 5, compensate: bool = True) -> np.ndarray:
     """Signed step height (m) of every edge, shape (8, rows, cols).
 
-    step(i -> j) = (z_j - z_i) - (zs_j - zs_i), with zs = smooth_mean(z, k):
+    step(i -> j) = (z_j - z_i) - (zs_j - zs_i), with zs = step_reference_mean(z, k):
     the part of the elevation change not explained by the smooth slope.
     Positive = step up, negative = step down. NaN if an endpoint is NaN or the
     edge leaves the grid.
+
+    Compensation (``compensate=True``, default): the k x k mean also follows
+    part of a sharp step. For a step of height h aligned with a grid axis, zs
+    jumps by h / k across it, so the raw value is h * (1 - 1/k) (0.8 h for
+    k = 5). The raw value is divided by (1 - 1/k) so that such a step is
+    measured at its true height. The factor is exact for axis-aligned steps,
+    both on the straight edges and on the diagonal edges that cross them
+    (zs changes only across the step, so the diagonal sees the same h / k).
+    TEAM ASSUMPTION: for oblique steps (e.g. at 45 degrees) the mean takes a
+    different fraction of the jump, so the compensated value is only
+    approximate. ``compensate=False`` returns the raw value (previous
+    behaviour). NaN stays NaN either way. With k = 1 the raw value is always
+    0 and no compensation is applied.
+
+    Reference mean (TEAM ASSUMPTION, see ``step_reference_mean``): at the
+    border the k x k window is completed by odd reflection (exact on linear
+    ramps, so no fake border steps and real border steps are still found);
+    windows touching NaN use the mean of their finite values, which may create
+    some fake steps around nodata holes.
     """
     z = np.asarray(z, dtype=np.float64)
-    zs = smooth_mean(z, k)
+    zs = step_reference_mean(z, k)
     zs = np.where(np.isnan(z), np.nan, zs)
-    return (neighbor_stack(z) - z) - (neighbor_stack(zs) - zs)
+    steps = (neighbor_stack(z) - z) - (neighbor_stack(zs) - zs)
+    if compensate and k > 1:
+        steps /= 1.0 - 1.0 / k
+    return steps
 
 
 def step_masks(steps: np.ndarray, max_up: float, max_down: float) -> np.ndarray:

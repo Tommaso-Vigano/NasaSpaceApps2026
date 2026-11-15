@@ -1,9 +1,14 @@
 """Inspect the THEMIS thermal inertia GeoTIFF of Jezero through ThermalInertiaAdapter.
 
 Requires rasterio and pyproj. Run from the repository root:
-    python scripts/inspect_thermal_inertia.py [path/to/Jezero_Thermal_Inertia_THEMIS_v1.tiff]
+    python scripts/inspect_thermal_inertia.py [path/to/Jezero_Thermal_Inertia_THEMIS_v1.tiff] [--data-dir DIR]
+
+Without a path, it uses <data dir>/05_termico_suolo/numerici/..., with the data dir chosen by
+scripts/_data_dir.py (--data-dir, then JEZERO_DATA_DIR from the environment or .env, then
+../jezero_data next to the repository).
 """
 
+import argparse
 import sys
 import warnings
 from pathlib import Path
@@ -17,18 +22,19 @@ import rasterio  # noqa: E402
 from src.data.adapters.implementations.thermal_inertia_adapter import (  # noqa: E402
     ThermalInertiaAdapter,
 )
+from src.constants import LANDER_SOL13_LONLAT, THEMIS_REL_PATH  # noqa: E402
 from src.models.terrain import from_map  # noqa: E402
 
-DEFAULT_PATH = (
-    Path.home() / "Documents" / "Michele documents" / "Family and Other"
-    / "NASA space apps 2026 - Milan" / "jezero_data" / "05_termico_suolo"
-    / "numerici" / "Jezero_Thermal_Inertia_THEMIS_v1.tiff"
-)
-LANDING_SITE = (77.4508, 18.4447)  # Perseverance (lon E, lat N)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _data_dir import resolve_data_dir  # noqa: E402  (scripts/_data_dir.py)
 
 
 def main() -> None:
-    path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_PATH
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("raster", nargs="?", type=Path, help="THEMIS thermal inertia GeoTIFF")
+    parser.add_argument("--data-dir", type=Path, help="jezero_data folder")
+    args = parser.parse_args()
+    path = args.raster if args.raster else resolve_data_dir(args.data_dir) / THEMIS_REL_PATH
 
     with rasterio.open(path) as src:
         print(f"File            : {path.name}")
@@ -61,7 +67,7 @@ def main() -> None:
         in_band = (valid >= 80) & (valid <= 120)
         print(f"% in [80, 120]  : {100 * np.mean(in_band):.2f}% of valid")
 
-    lon, lat = LANDING_SITE
+    lon, lat = LANDER_SOL13_LONLAT  # Perseverance landing site (sol 13 waypoint)
     col = int(round((lon - lon0) / dlon))
     row = int(round((lat0 - lat) / dlat))
     if 0 <= row < v.shape[0] and 0 <= col < v.shape[1]:

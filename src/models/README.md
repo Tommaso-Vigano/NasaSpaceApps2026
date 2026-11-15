@@ -6,7 +6,7 @@ The models do not depend on `Map`. `terrain.from_map(m) -> (z, dx, dy)` is the b
 
 ## Direction convention
 
-`OFFSETS = [(-1,0),(-1,1),(0,1),(1,1),(1,0),(1,-1),(0,-1),(-1,-1)]` as `(drow, dcol)`, named N, NE, E, SE, S, SO, O, NO. Row 0 is north.
+`OFFSETS = [(-1,0),(-1,1),(0,1),(1,1),(1,0),(1,-1),(0,-1),(-1,-1)]` as `(drow, dcol)`, named N, NE, E, SE, S, SO, O, NO (`OFFSETS` and `DIRECTION_NAMES` are defined in `src/constants.py` and re-exported by `terrain.py`). Row 0 is north.
 
 The horizontal length of an edge is `dy` for N/S, `dx` for E/O and `sqrt(dx²+dy²)` for the diagonals.
 
@@ -16,7 +16,7 @@ Per-edge arrays have shape `(8, rows, cols)`. The value `a[k, r, c]` belongs to 
 
 | File | Content |
 |---|---|
-| `constraints.py` | Frozen dataclasses `RoboticRover`, `CrewedRover`, `Astronaut`; `MARS_RADIUS_M`, `G_MARS`, `G_EARTH`, `G_REL`, `ETA_TERRAIN`, `SOURCES` |
+| `constraints.py` | Frozen dataclasses `RoboticRover`, `CrewedRover`, `Astronaut`; re-exports `MARS_RADIUS_M`, `G_MARS`, `G_EARTH`, `G_REL`, `ETA_TERRAIN`, `SOURCES`, which are defined in `src/constants.py` |
 | `terrain.py` | slope, TRI, smoothing, step heights, masks |
 | `metabolic.py` | Pandolf, Minetti, Tobler, per-edge time/energy, per-cell bridge |
 | `rocks.py` | Golombek & Rapp rock abundance, probability of a rock taller than a limit |
@@ -32,8 +32,9 @@ The demo script `scripts/demo_models.py` runs on a synthetic DEM and only prints
 **Terrain**
 - `horn_slope` [R29]: `dz/dx = ((c+2f+i)-(a+2d+g))/(8dx)` and `dz/dy = ((g+2h+i)-(a+2b+c))/(8dy)`, then `slope = atan(hypot)` in degrees. Border cells are NaN.
 - `tri` [R30]: `sqrt(Σ_8 (z_n − z_c)²)` in m. Border cells are NaN.
-- `smooth_mean(z, k)`: a NaN-aware k×k moving average built with `sliding_window_view`.
-- `edge_steps(z, k=5)`: `step(i→j) = (z_j − z_i) − (zs_j − zs_i)`, where `zs = smooth_mean(z, k)`. This is the part of the elevation change that the smooth slope does not explain. A positive value is a step up.
+- `smooth_mean(z, k)`: a NaN-aware k×k moving average built with separable cumulative sums (partial windows at borders and holes).
+- `edge_steps(z, k=5)`: `step(i→j) = (z_j − z_i) − (zs_j − zs_i)`, where `zs = smooth_mean(z, k)`. This is the part of the elevation change that the smooth slope does not explain. A positive value is a step up. Here `zs` is `step_reference_mean(z, k)`: at the border the k×k window is completed by odd reflection (`np.pad(..., mode="reflect", reflect_type="odd")`, exact on linear ramps); windows touching NaN fall back to the mean of their finite values. NaN endpoints and edges leaving the grid stay NaN.
+- `edge_steps(z, k=5, compensate=True)`: the k×k mean also follows part of a sharp step. Across a step of height `h` aligned with a grid axis, `zs` jumps by `h/k`, so the raw formula measures `h·(1 − 1/k)` (80 % with k = 5: 0.5 m → 0.40 m, i.e. a 0.30 m limit really meant ≈ 0.375 m). With `compensate=True` (default) the result is divided by `(1 − 1/k)`, so an axis-aligned step is measured at its true height. This is exact for axis-aligned steps, on the straight edges and on the diagonal edges that cross them; for oblique steps (e.g. 45°) it is approximate (TEAM ASSUMPTION). `compensate=False` gives the raw, uncompensated value. NaN stays NaN.
 - `step_masks`: an edge is forbidden if `step > max_up` or `step < −max_down`.
 
 **Metabolic**
@@ -87,15 +88,15 @@ The demo script `scripts/demo_models.py` runs on a synthetic DEM and only prints
 
 **Gates** [R24]
 
-- `load_mcd_diurnal(csv)` reads the CSV with the `csv` module and skips `#` comment lines. Columns are matched by substring: "Local time", "solar flux", "optical depth", "Temperature (K)", "wind speed". Only the first match of each is kept, and extra columns such as the wind components are ignored.
-- `daylight_window(mcd, 100)`: the first and last time with horizontal flux ≥ 100 W/m², interpolated linearly between hours. It assumes a single daytime window and an EVA that does not cross midnight.
-- `dust_storm_nogo(mcd, 2.0)`: τ ≥ 2.
+- `load_mcd_diurnal(csv)` reads the CSV with the `csv` module and skips `#` comment lines. Columns are matched by substring: "Local time", "solar flux", "optical depth", "Temperature (K)" (air; columns containing "surface" are skipped), "Surface temperature", "wind speed". Only the first match of each is kept, and extra columns such as the wind components are ignored.
+- `daylight_window(mcd, SOLAR_FLUX_MIN_W_M2 = 100)`: the first and last time with horizontal flux ≥ 100 W/m², interpolated linearly between hours. It assumes a single daytime window and an EVA that does not cross midnight.
+- `dust_storm_nogo(mcd, DUST_TAU_MAX = 2.0)`: τ ≥ 2. Both thresholds and the MCD column names are in `src/constants.py`.
 - `solar_power_ratio(mcd, ref)`: peak flux divided by the reference peak flux.
 - `eva_go(...) → (go, reasons)`: lists the reasons for a NO-GO.
 
 **Viewshed**
 
-- `viewshed(z, dx, dy, observer, observer_h=2, target_h=1.8, max_range_m=5000, n_rays=720)`:
+- `viewshed(z, dx, dy, observer, observer_h=LANDER_ANTENNA_H_M (2), target_h=1.8, max_range_m=5000, n_rays=720)`:
   - Radial rays are sampled every `min(dx, dy)` at the nearest cell, with the curvature drop `d²/(2R)` applied.
   - A cell is visible if the angle to a target `target_h` above it is ≥ the maximum terrain angle earlier on the ray.
   - A NaN or the grid edge blocks the rest of the ray.
@@ -104,7 +105,7 @@ The demo script `scripts/demo_models.py` runs on a synthetic DEM and only prints
 
 ## Sources
 
-The full references are in `constraints.SOURCES`:
+The full references are in `SOURCES` (`src/constants.py`, re-exported by `constraints.py`):
 
 - R1: NASA Perseverance components
 - R2: Rankin 2023
@@ -140,7 +141,7 @@ None of these are taken from a reference.
 6. **Step down.** `max_step_down_m = 0.225` m, which is 75 % of the step-up limit.
 7. **Agent dimensions.** Astronaut body mass 80 kg and eye height 1.8 m; rover widths of 2.7 m (robotic) and 3.0 m (crewed).
 8. **Thermal inertia.** `min_thermal_inertia = 100` (SI), our threshold for loose soil, based on [R4].
-9. **Smoothing window.** `smooth_mean` uses partial windows near borders and nodata holes. This slightly biases `edge_steps` on ramps in those places.
+9. **Step reference mean.** `edge_steps` completes the k×k window at the grid border by odd reflection (2·z_border − z_mirror), which continues a linear ramp exactly: no fake steps at the border on a plane, and real steps at the border are still found. Windows touching NaN (interior holes, or NaN border cells) use the mean of their finite values, as `smooth_mean` does; this may create some fake steps around holes, the prudent choice. `smooth_mean` itself still uses partial windows. By default the step is divided by `(1 − 1/k)` (`compensate=True`), exact for axis-aligned steps and approximate for oblique ones.
 10. **Degree conversion.** Grids in degrees are converted to metres with a local sphere of radius `MARS_RADIUS_M`, evaluated at the central latitude.
 11. **Rock height.** Rock height is 0.5 × diameter (`h_over_d`), and the integration stops at `D_max = 10 m`.
 12. **Rover rock penalty.** Rover travel time is multiplied by `(1 + p_rock)`, a penalty for detours around rocks.

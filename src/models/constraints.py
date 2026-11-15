@@ -1,60 +1,23 @@
 """Mobility constraints for the agents moving in Jezero crater.
 
 All quantities are SI (m, s, kg, W, deg for angles). Every constant carries the
-ID of its source in square brackets; the full references are in ``SOURCES``.
+ID of its source in square brackets; the full references are in ``SOURCES``
+(src/constants.py).
 Values marked "TEAM ASSUMPTION" are not taken from a reference.
 """
 
 from dataclasses import dataclass
 
-# --------------------------------------------------------------------------
-# Global physical constants
-# --------------------------------------------------------------------------
-MARS_RADIUS_M = 3_396_190.0  # IAU Mars sphere radius (Mars Trek / USGS) [R31]
-G_MARS = 3.721  # m/s^2, commonly used surface gravity (fact sheet: 3.71) [R32]
-G_EARTH = 9.80665  # m/s^2, standard gravity (CGPM 1901)
-G_REL = G_MARS / G_EARTH  # ~0.379, ratio Mars/Earth gravity
-
-# Terrain coefficient eta for the Pandolf equation.
-# TEAM ASSUMPTION, derived from the terrain factors reported in [R18].
-ETA_TERRAIN = {
-    "rock": 1.0,
-    "delta": 1.1,
-    "regolith": 1.1,
-    "rocky": 1.3,
-    "sand": 1.5,
-}
-
-SOURCES = {
-    "R1": "NASA, Mars 2020 Perseverance Rover Components (mars.nasa.gov)",
-    "R2": "Rankin et al. 2023, IEEE Aerospace Conference (Perseverance driving performance)",
-    "R3": "NASA/JPL PIA07999, Opportunity at Purgatory Dune",
-    "R4": "Morgan et al. 2018, Space Science Reviews 214:104 (InSight landing site thermal inertia)",
-    "R5": "Golombek & Rapp 1997, JGR 102(E2):4117 (Mars rock size-frequency distributions)",
-    "R7": "NASA SP-4214 / NASA TM X-64623, Lunar Roving Vehicle operations handbook",
-    "R9": "MIT 16.89 Space Systems Engineering, 2007",
-    "R10": "NASA Space Exploration Vehicle (SEV) fact sheet",
-    "R11": "NASA EVA-EXP-0075, Exploration EVA System Concept of Operations",
-    "R12": "NASA ICES-2025-294, step height for suited locomotion",
-    "R13": "NASA ICES 2026, Mars EVA suit mass and metabolic rates",
-    "R15": "Pandolf, Givoni & Goldman 1977, J Appl Physiol 43:577",
-    "R18": "Richmond et al. 2015, J Sport Hum Perf 3:1 (terrain factors)",
-    "R20": "NASA NESC, space weather / SEP warning and shelter times",
-    "R24": "Mars Climate Database v6.2",
-    "R27": "Minetti et al. 2002, J Appl Physiol 93:1039 (energy cost on gradients)",
-    "R28": "Tobler 1993, Three presentations on geographical analysis (hiking function)",
-    "R29": "Horn 1981, Proc IEEE 69:14 (hill shading and slope)",
-    "R30": "Riley, DeGloria & Elliot 1999, Terrain Ruggedness Index",
-    "R31": (
-        "Archinal et al. 2018, Report of the IAU Working Group on Cartographic Coordinates "
-        "and Rotational Elements: 2015, Celest. Mech. Dyn. Astr. 130:22 "
-        "(Mars sphere R = 3396.19 km, used by Mars Trek / USGS products)"
-    ),
-    "R32": (
-        "NASA NSSDCA Mars Fact Sheet (surface gravity 3.71 m/s^2; "
-        "3.721 m/s^2 is the commonly used value)"
-    ),
-}
+# Physical constants and the bibliography live in src/constants.py; they are
+# re-exported here so that `from src.models.constraints import MARS_RADIUS_M` works.
+from src.constants import (  # noqa: F401
+    ETA_TERRAIN,
+    G_EARTH,
+    G_MARS,
+    G_REL,
+    MARS_RADIUS_M,
+    SOURCES,
+)
 
 
 # --------------------------------------------------------------------------
