@@ -336,3 +336,5 @@ html, body {
 @media (max-width: 640px) {
     .region-panel { top: 12px; left: 12px; width: calc(100vw - 260px); min-width: 105px; padding: 8px; }
 }
+
+.coverage-status { margin: 5px 0 8px; color: var(--dust-dim); font-size: 11px; line-height: 1.45; }

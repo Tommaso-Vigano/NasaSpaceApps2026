@@ -47,6 +47,16 @@
             <svg class="chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>
         </button>
         <div id="controls-body" class="panel-body">
+            <section class="control-section" aria-label="Layers">
+                <div class="section-head">Layers</div>
+                <label class="row" style="--c: #80d9bb">
+                    <span class="swatch swatch-dot" aria-hidden="true"></span>
+                    <span class="row-label">Elevation coverage</span>
+                    <input id="coverage-visible" type="checkbox" checked>
+                    <span class="switch" aria-hidden="true"></span>
+                </label>
+                <p id="coverage-status" class="coverage-status" role="status">Loading coverage...</p>
+            </section>
             <section id="marker-controls" class="control-section" aria-label="Markers"></section>
         </div>
     </aside>
@@ -67,6 +77,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="{{ url_for('static', filename='main.js') }}"
             data-landmarks-url="{{ url_for('globe_landmarks') }}"
+            data-coverage-url="{{ url_for('elevation_coverage') }}"
             data-static-url="{{ url_for('static', filename='') }}"></script>
 </body>
 

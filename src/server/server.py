@@ -7,6 +7,7 @@ from werkzeug.exceptions import HTTPException
 
 from src.landmarks.registry import LandmarkRegistry
 from src.data.data_model import WorldModel
+from src.data.types import Datatype
 
 
 class WebServer:
@@ -46,6 +47,19 @@ class WebServer:
         def globe_landmarks():
             with self._lock:
                 return jsonify(self.landmarks.to_globe_dict())
+
+        @self.app.get("/api/globe/elevation-coverage")
+        def elevation_coverage():
+            # The viewer displays the union of these footprints. No raster
+            # samples or routing computations are needed for this layer.
+            return jsonify({
+                "rectangles": [
+                    {"top_left": list(map_.top_left),
+                     "bottom_right": list(map_.bottom_right)}
+                    for map_ in self.world_model.get_maps_by_datatype(Datatype.ELEVATION)
+                ],
+                "coordinate_order": "longitude, latitude",
+            })
 
         @self.app.errorhandler(HTTPException)
         def http_error(error):

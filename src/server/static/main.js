@@ -9,6 +9,7 @@
     const staticUrl = script.dataset.staticUrl;
     const CONFIG = {
         landmarksUrl: script.dataset.landmarksUrl,
+        coverageUrl: script.dataset.coverageUrl,
         colorMapUrl: staticUrl + 'texture/Mars_surface_map.png',
         elevationMapUrl: staticUrl + 'texture/mars_elevation.jpg',
         starsUrl: staticUrl + 'texture/galaxy.svg',
@@ -280,13 +281,20 @@
         scene.add(camera);
  
         // Load the data in parallel
-        const [elevationImg, colorMap, starTexture, landmarkData] = await Promise.all([
+        const [elevationImg, colorMap, starTexture, landmarkData, coverageData] = await Promise.all([
             loadImage(CONFIG.elevationMapUrl),
             loadColorTexture(CONFIG.colorMapUrl, renderer),
             loadStarTexture(CONFIG.starsUrl, renderer),
             fetch(CONFIG.landmarksUrl).then((r) => {
                 if (!r.ok) throw new Error('Could not load ' + CONFIG.landmarksUrl);
                 return r.json();
+            }),
+            fetch(CONFIG.coverageUrl).then((response) => {
+                if (!response.ok) throw new Error('Could not load elevation coverage');
+                return response.json();
+            }).catch((error) => {
+                console.warn(error);
+                return null; // Coverage is optional; the globe remains usable.
             }),
         ]);
  
@@ -315,6 +323,70 @@
             specular: 0x050505,
             shininess: 2,
         });
+        // Tint the existing displaced surface rather than placing translucent
+        // patch meshes over it. A single "inside any rectangle" test renders
+        // the union exactly, without darker overlaps, seams or z-fighting.
+        const coverageToggle = $('coverage-visible');
+        const coverageStatus = $('coverage-status');
+        const coverageEnabled = { value: coverageToggle.checked ? 1.0 : 0.0 };
+        if (coverageData && Array.isArray(coverageData.rectangles)) {
+            const rectangles = coverageData.rectangles.map((rectangle) => new THREE.Vector4(
+                rectangle.top_left[0], rectangle.bottom_right[1],
+                rectangle.bottom_right[0], rectangle.top_left[1],
+            )); // west, south, east, north; all angles in degrees
+            coverageStatus.textContent = rectangles.length
+                ? 'Mint arrows point to elevation coverage. Gaps within datasets may exist.'
+                : 'No elevation datasets loaded.';
+            coverageToggle.disabled = rectangles.length === 0;
+            if (rectangles.length) {
+                material.onBeforeCompile = (shader) => {
+                    shader.uniforms.coverageEnabled = coverageEnabled;
+                    shader.uniforms.coverageRectangles = { value: rectangles };
+                    shader.vertexShader = 'varying vec3 vCoveragePosition;\n' + shader.vertexShader;
+                    shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>',
+                        '#include <begin_vertex>\nvCoveragePosition = position;');
+                    shader.fragmentShader = `
+                        varying vec3 vCoveragePosition;
+                        uniform float coverageEnabled;
+                        uniform vec4 coverageRectangles[${rectangles.length}];
+                        float elevationCoverage(vec2 coordinate) {
+                            float covered = 0.0;
+                            for (int i = 0; i < ${rectangles.length}; i++) {
+                                vec4 box = coverageRectangles[i];
+                                // Accept both signed and 0..360 source longitudes.
+                                float lon = coordinate.x;
+                                bool withinLongitude =
+                                    (lon >= box.x && lon <= box.z) ||
+                                    (lon + 360.0 >= box.x && lon + 360.0 <= box.z) ||
+                                    (lon - 360.0 >= box.x && lon - 360.0 <= box.z);
+                                if (withinLongitude && coordinate.y >= box.y && coordinate.y <= box.w)
+                                    covered = 1.0;
+                            }
+                            return covered;
+                        }
+                    ` + shader.fragmentShader;
+                    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `
+                        #include <color_fragment>
+                        vec3 direction = normalize(vCoveragePosition);
+                        vec2 coordinate = vec2(
+                            mod(degrees(atan(-direction.z, direction.x)) + ${CONFIG.elevationMapCenterLon.toFixed(8)} + 540.0, 360.0) - 180.0,
+                            degrees(asin(clamp(direction.y, -1.0, 1.0)))
+                        );
+                        float covered = elevationCoverage(coordinate) * coverageEnabled;
+                        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.16, 0.85, 0.61), covered * 0.60);
+                    `);
+                };
+            }
+        } else {
+            coverageStatus.textContent = 'Elevation coverage unavailable. Reload to retry.';
+            coverageToggle.disabled = true;
+        }
+        coverageToggle.addEventListener('change', () => {
+            coverageEnabled.value = coverageToggle.checked ? 1.0 : 0.0;
+            coverageToggle.closest('label').classList.toggle('is-off', !coverageToggle.checked);
+            coverageArrows.visible = coverageToggle.checked;
+        });
+
         const planetMesh = new THREE.Mesh(geometry, material);
  
         // Everything that should turn with the planet (surface + pins) lives in this group
@@ -322,6 +394,91 @@
         planet.add(planetMesh);
         scene.add(planet);
  
+        // Four inward-pointing surface arrows make small coverage patches
+        // discoverable from orbit. Their size is angular, independent of the
+        // patch size; the tip stops just short of the actual footprint.
+        const coverageArrows = new THREE.Group();
+        coverageArrows.visible = coverageToggle.checked;
+        planet.add(coverageArrows);
+        const coverageArrowMaterial = new THREE.MeshBasicMaterial({
+            color: 0x98fb98, side: THREE.DoubleSide, depthWrite: false,
+            transparent: true, opacity: 0.95,
+        });
+        const coverageArrowAccent = new THREE.MeshBasicMaterial({
+            color: 0xc8ffe2, side: THREE.DoubleSide, depthWrite: false,
+            transparent: true, opacity: 0.55,
+        });
+        const coverageArrowGlow = new THREE.MeshBasicMaterial({
+            color: 0x98fb98, side: THREE.DoubleSide, depthWrite: false,
+            transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending,
+        });
+        function addCoverageArrow(latitude, longitude, axis, sign) {
+            const phi = latitude * DEG;
+            const lambda = (longitude - CONFIG.elevationMapCenterLon) * DEG;
+            const normal = latLonToVector3(latitude, longitude, 1);
+            const north = new THREE.Vector3(-Math.sin(phi) * Math.cos(lambda),
+                Math.cos(phi), Math.sin(phi) * Math.sin(lambda));
+            const east = new THREE.Vector3(-Math.sin(lambda), 0, -Math.cos(lambda));
+            const outward = (axis === 'latitude' ? north : east).clone().multiplyScalar(sign);
+            const sideways = new THREE.Vector3().crossVectors(normal, outward).normalize();
+            function point(distance, lateral) {
+                // Spherical tangent offsets also behave correctly at the poles
+                // and across the longitude seam.
+                const tangent = outward.clone().multiplyScalar(distance * DEG)
+                    .addScaledVector(sideways, lateral * DEG);
+                const angle = tangent.length();
+                const direction = normal.clone().multiplyScalar(Math.cos(angle))
+                    .addScaledVector(tangent.normalize(), Math.sin(angle)).normalize();
+                const lat = Math.asin(THREE.MathUtils.clamp(direction.y, -1, 1)) / DEG;
+                const lon = Math.atan2(-direction.z, direction.x) / DEG + CONFIG.elevationMapCenterLon;
+                const radius = CONFIG.radius + sampleElevation(lat, lon) * CONFIG.displacementScale
+                    + CONFIG.displacementBias + 0.002;
+                return direction.multiplyScalar(radius);
+            }
+            function chevron(tip, back, width, thickness, mat) {
+                const vertices = [], indices = [];
+                // Subdivide each solid arm so it hugs the displaced surface.
+                for (const side of [-1, 1]) {
+                    const offset = vertices.length / 3;
+                    for (let i = 0; i <= 12; i++) {
+                        const t = i / 12;
+                        const outside = point(tip + (back - tip) * t, side * width * t);
+                        const inside = point(tip + thickness + (back - tip - thickness) * t,
+                                             side * (width - thickness * 0.65) * t);
+                        vertices.push(outside.x, outside.y, outside.z, inside.x, inside.y, inside.z);
+                        if (i < 12) {
+                            const n = offset + i * 2;
+                            indices.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
+                        }
+                    }
+                }
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                geometry.setIndex(indices);
+                coverageArrows.add(new THREE.Mesh(geometry, mat));
+            }
+            // A broad, shaftless head with a detached trailing accent: compact
+            // navigation-glyph proportions rather than a long diagram arrow.
+            chevron(0.85, 2.85, 1.55, 1.0, coverageArrowGlow);
+            chevron(1.0, 2.7, 1.4, 0.65, coverageArrowMaterial);
+            chevron(2.5, 3.65, 1.15, 0.32, coverageArrowAccent);
+        }
+        const arrowFootprints = new Set();
+        for (const rectangle of (coverageData && coverageData.rectangles) || []) {
+            const key = JSON.stringify(rectangle);
+            if (arrowFootprints.has(key)) continue;
+            arrowFootprints.add(key);
+            const [west, north] = rectangle.top_left;
+            const [east, south] = rectangle.bottom_right;
+            if (east - west >= 359 && north - south >= 179) continue;
+            const middleLatitude = (north + south) / 2;
+            const middleLongitude = (west + east) / 2;
+            addCoverageArrow(north, middleLongitude, 'latitude', 1);
+            addCoverageArrow(south, middleLongitude, 'latitude', -1);
+            addCoverageArrow(middleLatitude, east, 'longitude', 1);
+            addCoverageArrow(middleLatitude, west, 'longitude', -1);
+        }
+
         // ---- Stars ---------------------------------------------------
         scene.add(new THREE.Mesh(
             new THREE.SphereGeometry(50, 48, 48),
