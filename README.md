@@ -1,52 +1,83 @@
-# MARS Explorer
-We developed a software to help astronauts and humans in exploring the Mars
-surface, using both rovers and human exploration. 
+<p align="center">
+  <img src="readme_data/title.svg" alt="MARS Explorer" width="500">
 
-## Cost map
+<p align="center">
+  <b>Route planning on the Martian surface for rovers and astronauts.</b>
+</p>
 
-Costs depends on the profile of the explorer, we have different profiles
-for humans and rovers.
+<p align="center">
+  <img src="readme_data/mars_globe_ui.gif" alt="Rotating 3D globe of Mars in the MARS Explorer interface" width="800">
+</p>
 
-## Pathfinding
-The pathfinding class, is created on a grid cost map (matrix), in which 
-each cell contains a float representing a cost. The more the number it's higher
-the more the subject is not encouraged to step on that cell.
+MARS Explorer is an interactive tool to browse Mars in 3D, select an area of
+interest, and compute the lowest-cost path across it. The cost depends on who
+is travelling: a rover or a human.
 
-The matrix is then transformed into a graph, then we add costs on arcs
-considering costs that changes considering a particular path (e.g. slopes from 
-cell A to B is different from B to A). 
+*Developed for the NASA Space Apps Challenge 2026.*
 
-The pathfinding was implemented using the library of NetworkX, useful in
-pathfinding using graphs. We used the A* algorithm, which combines efficiency
-and can be simply implemented.
+---
 
-## UI
-### 3D vision of Mars planet
-Mars planet 3d vision, pin that highlights interesting points such as mounts, used landing area 
-on previous missions, etc. 
-By using the right click you can highlight an area, and it shows a detailed image of the selected area.
+## Features
 
-### Pathfinding
-On the detailed area selected, you can zoom on the image and by using your right
-click, by clicking two times you can select a source and a destination to compute the shortest
-path.
+- **3D globe of Mars** with pins on points of interest (volcanoes, mountains, previous landing sites).
+- **Region selection:** draw a rectangle on the globe to open a detailed view.
+- **Profile-based routing:** separate cost models for rovers and humans.
+- **Direction-aware costs:** climbing from A to B is not the same as descending from B to A.
+- **Perseverance imagery:** real rover photos of the selected area, when available.
+
+---
+
+## User interface
+
+### 3D Mars view
+Rotate and zoom the planet. Pins mark notable locations, such as the Curiosity
+rover's position.
+
+<p align="center">
+  <img src="readme_data/Curiosity_pin.png" alt="Pin marking the Curiosity rover on the Mars globe" width="500"><br>
+  <em>Pin marking the Curiosity rover.</em>
+</p>
+
+**Right-click and drag** to select an area and open a high-detail image of it.
+
+### Route planner
+1. In the detailed view, zoom in on the area you need.
+2. **Right-click twice**: first the **source**, then the **destination**.
+3. The lowest-cost path for the chosen profile is drawn on the map.
+
+<p align="center">
+  <img src="readme_data/pathfinding_mars.png" alt="Computed path between two points on the Martian terrain" width="600"><br>
+  <em>Lowest-cost path computed between a source and a destination.</em>
+</p>
+
+---
+
+## How it works
+
+### Cost map
+Each terrain cell gets a cost from the **explorer profile** (rover or human).
+Costs are stored as a matrix of floats: **the higher the value, the more the
+cell is discouraged**.
+
+> Factors used: *[e.g. slope, roughness, elevation, albedo, thermal inertia]*
 
 ## NASA data
 We used [Mars Trek](https://trek.nasa.gov/mars/#v=0.1&x=0&y=0&z=1&p=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A104905&d=&locale=&b=mars&e=-269.999994963537%2C-128.49609135308955%2C269.999994963537%2C128.49609135308955&sfz=&w=)
- to download different visions of the whole planet. 
+ to compare global layers (elevation, dust, exploration-zones perimeters, ...) to choose the exploration zone and to understand what 
+each dataset can and cannot tell us at the scale of a walk. We used albedo and thermal inertia maps for visualization on User Interface.
+Moreover, we used the data contained on these maps to compute the costs of each path by computing the cost maps.
 
-We used [USG-NASA Planetary Geologic Mapping program](https://astrogeology-usgs.hub.arcgis.com/pages/interactive-maps-mars)
-    to download map of Mars and data.
+We used [USGS-NASA Planetary Geologic Mapping program](https://astrogeology-usgs.hub.arcgis.com/pages/interactive-maps-mars)
+    to broaden our knowledge on Mars in order to pick interesting targets for the traverses.
 
 We used [Curiosity’s Proposed Path up Mount Sharp](https://science.nasa.gov/resource/curiositys-proposed-path-up-mount-sharp/)
-to have an idea of a possible path used by a real case on Mars.
+to check that our routes look realistic (they avoid dangerous areas).
 
 We used [Perseverance images](https://mars.nasa.gov/mars2020/multimedia/raw-images/) to help astronauts in recognising their 
-while exploring Mars.
+while exploring Mars. On a selected area it shows the images taken by the _Perseverance_ rover.
 
 ## Other sources
 - [NASA Science – Perseverance Rover Components](https://science.nasa.gov/mission/mars-2020-perseverance/rover-components/)
-
 - [Rankin A. et al. (2023). Perseverance Rapid Traverse Campaign. IEEE Aerospace Conference](https://ieeexplore.ieee.org/document/10115835/)
 - [NASA/JPL – Looking Back at ‘Purgatory Dune’ (PIA07999)](https://science.nasa.gov/photojournal/looking-back-at-purgatory-dune)
 - Morgan P. et al. (2018). A pre-landing assessment of regolith properties at the InSight landing site. Space Sci. Rev. 214:104. doi:10.1007/s11214-018-0537-y
@@ -73,3 +104,6 @@ while exploring Mars.
 - [Mars Climate Database v6.2, LMD/ESA/CNES](https://www-mars.lmd.jussieu.fr/)
 - USGS SIM 3464, Geologic map of Jezero crater and the Nili Planum region, Mars (1:75,000).
 - Horn B.K.P. (1981). Hill shading and the reflectance map. Proc. IEEE 69(1):14–47 · Riley S.J. et al. (1999). A terrain ruggedness index. Intermountain J. Sci. 5:23–27
+
+---
+>Project developed by: Dalil Osée Ouattara - Matteo Piacentini - Michele Ramalli - Tommaso Viganò - Lorenzo Zani 
