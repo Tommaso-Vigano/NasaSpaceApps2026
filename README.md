@@ -1,4 +1,7 @@
 <p align="center">
+  <img src="readme_data/curiosity_banner.jpg" alt="Curiosity rover on the Martian surface" width="80%">
+</p>
+<p align="center">
   <img src="readme_data/title.svg" alt="MARS Explorer" width="500">
 
 <p align="center">
