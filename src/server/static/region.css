@@ -135,6 +135,18 @@ dialog {
 .is-3d #region-canvas { visibility: hidden; pointer-events: none; }
 .is-3d .routing-panel { opacity: .4; pointer-events: none; }
 .is-3d #photo-markers, .is-3d .photos-control, .is-3d .map-controls, .is-3d #map-status { display: none; }
+#route-profile-button { padding: 0; margin-top: 8px; border: 0; color: #a4f5d5; font-size: 12px; }
+#route-statistics { position: fixed; z-index: 4; inset: 50% auto auto 50%; transform: translate(-50%, -50%); margin: 0; width: min(680px, calc(100vw - 32px)); max-height: 80vh; overflow-y: auto; }
+.route-chart-heading { display: flex; align-items: center; gap: 12px; }
+.route-chart-heading h2 { margin: 0; font-size: 15px; font-weight: 500; flex: 1; }
+#route-statistics-close { border: 0; padding: 0 5px; font-size: 22px; }
+#route-measurement { background: #252a31; color: inherit; border: 1px solid #53514e; border-radius: 4px; padding: 5px; color-scheme: dark; }
+#route-chart { display: block; width: 100%; margin-top: 14px; overflow: visible; }
+#route-chart text { fill: #b9a592; font: 11px system-ui, sans-serif; }
+.chart-grid { stroke: #ffffff12; stroke-width: 1; }
+.chart-measurement { fill: none; stroke: #a4f5d5; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chart-point { fill: #a4f5d5; }
+#route-chart-summary { margin: 10px 0 0; font-size: 12px; color: #b9a592; }
 @media (max-width: 700px) {
     .terrain-tools { top: 76px; right: 10px; }
 }

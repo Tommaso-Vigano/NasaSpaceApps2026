@@ -11,6 +11,7 @@ from src.app.routing_executor import RoutingExecutor
 from src.basic import Coordinate
 from src.data.data_model import WorldModel
 from src.server.constraint_heatmaps import encode_heatmaps
+from src.server.path_samples import sample_path
 
 
 class NoRouteError(ValueError):
@@ -100,4 +101,6 @@ def route_region(regions, sector_id, payload):
                 "coordinates": result.coordinates, "total_cost": result.total_cost,
                 "grid_shape": list(elevation.values.shape), "granularity": list(precision),
                 "subdivisions": subdivisions, "profile": profile_spec['type'], "layers": ["elevation"],
-                "heatmaps": heatmaps}
+                "heatmaps": heatmaps,
+                "path_samples": sample_path(result.path, result.coordinates,
+                    {'altitude': ('Altitude', 'm', elevation)}, executor.penalty_manager.MARS_RADIUS)}

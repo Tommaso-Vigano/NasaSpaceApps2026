@@ -36,6 +36,7 @@
             <button id="clear-endpoints" disabled>Clear points</button>
         </div>
         <p id="route-status" role="status"></p>
+        <button id="route-profile-button" type="button" hidden>Route profile</button>
     </aside>
     <div class="constraints-dock">
         <div class="profile-settings">
@@ -78,6 +79,15 @@
         <figure><img id="photo-full" alt=""><figcaption id="photo-caption"></figcaption></figure>
     </dialog>
     {% endif %}
+    <dialog id="route-statistics" aria-labelledby="route-statistics-title">
+        <div class="route-chart-heading">
+            <h2 id="route-statistics-title">Altitude</h2>
+            <select id="route-measurement" aria-label="Route measurement" hidden></select>
+            <button id="route-statistics-close" type="button" aria-label="Close route profile">&times;</button>
+        </div>
+        <svg id="route-chart" role="img" aria-label="Altitude along the route"></svg>
+        <p id="route-chart-summary"></p>
+    </dialog>
     <nav class="map-controls" aria-label="Map controls">
         <button id="zoom-in" aria-label="Zoom in">+</button>
         <button id="zoom-out" aria-label="Zoom out">&minus;</button>
@@ -88,6 +98,7 @@
     <script src="{{ url_for('static', filename='region_photos.js') }}"></script>
     <script src="{{ url_for('static', filename='region_overlays.js') }}"></script>
     <script src="{{ url_for('static', filename='region_terrain.js') }}"></script>
+    <script src="{{ url_for('static', filename='route_statistics.js') }}"></script>
     <script src="{{ url_for('static', filename='region.js') }}"></script>
 </body>
 </html>

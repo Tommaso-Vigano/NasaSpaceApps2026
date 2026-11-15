@@ -9,6 +9,8 @@
     const photos = window.createPhotoStops(config, canvas);
     const endpoints = [];
     let route = [], routeController = null, routing = false, mode3D = false;
+    let routeHitPath = null;
+    const statistics = window.createRouteStatistics?.();
     const routeStatus = document.getElementById('route-status');
     const routeButton = document.getElementById('calculate-route');
     const clearButton = document.getElementById('clear-endpoints');
@@ -38,6 +40,7 @@
             if (profileButton) profileButton.disabled = active;
             if (profilePanel) profilePanel.hidden = true;
             if (active) {
+                statistics?.close();
                 controller?.abort(); clearTimeout(timer); generation++; drag = null;
                 document.getElementById('photo-stop')?.close();
             } else resize();
@@ -70,6 +73,8 @@
     }
 
     function clearHeatmaps() {
+        statistics?.clear();
+        routeHitPath = null;
         heatmaps = null;
         constraintOptions.replaceChildren();
         constraintStatus.textContent = 'Available after routing.';
@@ -202,9 +207,10 @@
         const screen = (p) => ({x: (p[0]-view.x)/view.width*canvas.width,
                                 y: (p[1]-view.y)/view.height*canvas.height});
         context.save();
+        routeHitPath = null;
         if (route.length) {
             const points = route.map(screen);
-            context.beginPath(); context.moveTo(points[0].x, points[0].y);
+            routeHitPath = new Path2D(); routeHitPath.moveTo(points[0].x, points[0].y);
             // Round only a small portion of each corner; authoritative route
             // vertices remain unchanged in source pixels and geographic JSON.
             for (let i = 1; i < points.length-1; i++) {
@@ -212,13 +218,13 @@
                 const before = Math.hypot(b.x-a.x, b.y-a.y), after = Math.hypot(c.x-b.x, c.y-b.y);
                 const radius = 0.12 * Math.min(before, after);
                 if (!before || !after) continue;
-                context.lineTo(b.x-(b.x-a.x)/before*radius, b.y-(b.y-a.y)/before*radius);
-                context.quadraticCurveTo(b.x, b.y, b.x+(c.x-b.x)/after*radius, b.y+(c.y-b.y)/after*radius);
+                routeHitPath.lineTo(b.x-(b.x-a.x)/before*radius, b.y-(b.y-a.y)/before*radius);
+                routeHitPath.quadraticCurveTo(b.x, b.y, b.x+(c.x-b.x)/after*radius, b.y+(c.y-b.y)/after*radius);
             }
-            const last = points[points.length-1]; context.lineTo(last.x, last.y);
+            const last = points[points.length-1]; routeHitPath.lineTo(last.x, last.y);
             context.lineJoin = 'round'; context.lineCap = 'round';
-            context.lineWidth = 6*ratio; context.strokeStyle = '#18272d'; context.stroke();
-            context.lineWidth = 3*ratio; context.strokeStyle = '#a4f5d5'; context.stroke();
+            context.lineWidth = 6*ratio; context.strokeStyle = '#18272d'; context.stroke(routeHitPath);
+            context.lineWidth = 3*ratio; context.strokeStyle = '#a4f5d5'; context.stroke(routeHitPath);
         }
         endpoints.forEach((point, index) => {
             const p = screen([point.x, point.y]);
@@ -229,6 +235,16 @@
             context.fillStyle = '#fff'; context.fillText(index ? 'B' : 'A', p.x+11*ratio, p.y-8*ratio);
         });
         context.restore();
+    }
+    function isOnRoute(event) {
+        if (mode3D || !routeHitPath) return false;
+        const rect = canvas.getBoundingClientRect(), ratio = canvas.width/rect.width;
+        context.save(); context.lineWidth = 16*ratio;
+        context.lineCap = context.lineJoin = 'round';
+        const hit = context.isPointInStroke(routeHitPath,
+            (event.clientX-rect.left)/rect.width*canvas.width,
+            (event.clientY-rect.top)/rect.height*canvas.height);
+        context.restore(); return hit;
     }
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
     canvas.addEventListener('pointerdown', (event) => {
@@ -245,6 +261,7 @@
     canvas.addEventListener('pointermove', (event) => {
         const point = pixelAt(event);
         mouseCoordinate.textContent = point ? formatPoint(point) : 'Outside sector';
+        if (!drag) canvas.style.cursor = isOnRoute(event) ? 'pointer' : 'grab';
     });
     canvas.addEventListener('pointerleave', () => { mouseCoordinate.textContent = '-'; });
     clearButton.addEventListener('click', () => {
@@ -271,6 +288,7 @@
             if (!response.ok) throw new Error(result.error || 'Routing failed.');
             if (!result.path.length) throw new Error('No route was found.');
             route = result.path;
+            statistics?.set(result);
             routeStatus.textContent = result.path.length === 1
                 ? 'Both points snap to the same grid cell. Increase subdivisions for more detail.'
                 : 'Route found on a ' + result.grid_shape[1] + ' x ' + result.grid_shape[0] + ' grid.';
@@ -375,11 +393,13 @@
     }, {passive: false});
     canvas.addEventListener('pointerdown', (event) => {
         if (mode3D || event.button !== 0) return;
-        drag = {id: event.pointerId, x: event.clientX, y: event.clientY};
+        drag = {id: event.pointerId, x: event.clientX, y: event.clientY,
+                startX: event.clientX, startY: event.clientY, moved: false};
         canvas.setPointerCapture(event.pointerId); canvas.style.cursor = 'grabbing';
     });
     canvas.addEventListener('pointermove', (event) => {
         if (!drag || event.pointerId !== drag.id) return;
+        drag.moved ||= Math.hypot(event.clientX-drag.startX, event.clientY-drag.startY) > 5;
         const rect = canvas.getBoundingClientRect();
         view.x -= (event.clientX-drag.x)/rect.width*view.width;
         view.y -= (event.clientY-drag.y)/rect.height*view.height;
@@ -389,7 +409,11 @@
         mouseCoordinate.textContent = point ? formatPoint(point) : 'Outside sector';
     });
     function release() { drag = null; canvas.style.cursor = 'grab'; }
-    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointerup', event => {
+        const clicked = event.button === 0 && drag && event.pointerId === drag.id && !drag.moved;
+        release();
+        if (clicked && isOnRoute(event)) statistics?.open();
+    });
     canvas.addEventListener('pointercancel', release);
     canvas.addEventListener('lostpointercapture', release);
     document.getElementById('zoom-in').addEventListener('click', () => zoom(0.5));
