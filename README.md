@@ -25,7 +25,6 @@ is travelling: a rover or a human.
 - **3D globe of Mars** with pins on points of interest (volcanoes, mountains, previous landing sites).
 - **Region selection:** draw a rectangle on the globe to open a detailed view.
 - **Profile-based routing:** separate cost models for rovers and humans.
-- **Direction-aware costs:** climbing from A to B is not the same as descending from B to A.
 - **Perseverance imagery:** real rover photos of the selected area, when available.
 
 ---
